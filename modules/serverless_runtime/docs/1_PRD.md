@@ -1,21 +1,30 @@
 # PRD — Serverless Runtime (Business Requirements)
 
 ## Purpose
-Provide a platform capability that enables tenants and their users to create, modify, register, and execute custom automation (functions and workflows) at runtime, without requiring a product rebuild or redeploy, while maintaining strong isolation, governance, and operational visibility.
+Provide a platform capability allowing application developers, tenants and users to create, extend, modify and execute custom functions that can be deployed at runtime and referred to between different implementation languages with little overhead.
+
+This mechanism provides strong and configurable isolation, governance, introspection and monitoring to ensure the safe operation of such customizable systems.
 
 ## Background / Problem Statement
-The platform requires a unified way to automate long-running and multi-step business processes across modules and external systems. Today, automation capability is limited by release cycles and lacks durable, tenant-isolated execution with governance, controls, and observability.
+The platform requires a unified way to extend base functionality, and to automate long-running and multi-step system and business processes across organizational boundaries. Today, automation capability is limited by release cycles and lacks durable, tenant-isolated execution with governance, controls, and observability.
 
 This PRD defines the business requirements for a Serverless Runtime capability that supports:
-- tenant-specific automation assets (functions/workflows)
+- application defined base contracts that can be implemented or extended by tenants or users
+- flexible tenant-specific automation and business logic (functions/workflows)
+- synchronous and asynchronous execution
+- composability of small functions into larger operations
 - durable long-running execution
+- zero-resource sleep, supporting event wait and human-in-the-loop cases
+- high-scalability and compatability with event-sourcing
+- address native module functions, app, tenant and user defined functions in a common calling mechanism
+- hot (re)loading native modules for development or worker-process cases
 - governance (limits, permissions, auditability)
-- operational excellence (visibility, debugging)
+- introspection and monitoring (visibility, logging, debugging, metrics, alerts)
 
 ## Goals (Business Outcomes)
-- Enable faster delivery of tenant-specific automation without platform redeploys.
+- Enable secure, scalable, customizable applications.
 - Reduce operational risk for long-running processes by ensuring durability and resumability.
-- Improve supportability and incident resolution via rich observability and debugging.
+- Accelerate development and improve supportability via rich observability and debugging.
 - Maintain compliance posture with auditability and strict tenant isolation.
 
 ## Stakeholders / Users
@@ -28,13 +37,17 @@ This PRD defines the business requirements for a Serverless Runtime capability t
 - Runtime creation/modification/registration and execution of:
   - **Functions** (single unit of custom logic)
   - **Workflows** (multi-step orchestration)
-- Tenant- and user-scoped registries for functions/workflows.
+- Application, tenant and user-scoped registries for functions/workflows.
+- Synchronous execution for API composition, presentation or simple APIs.
 - Long-running asynchronous execution (including multi-day executions).
+- Host-Worker mechanism with os-level isolation of secrets and resource access from untrusted code.
 - Governance controls via resource limits and policies.
 - Multiple trigger modes (schedule, API-triggered, event-triggered).
 - Secure execution context options (system account vs API client or user context).
 - Runtime interactions with platform capabilities (e.g., calling platform-provided runtime methods).
+- Hot (re)loading of native modules for simplified development and workers.
 - Durability features (snapshots / suspend-resume) for reliability and event waiting.
+- Status and result reporting common across all function types.
 - Operational tooling requirements: visibility, audit trail, and debugging capabilities.
 - Built-in support for distributed transaction patterns (saga and compensation).
 
@@ -42,28 +55,27 @@ This PRD defines the business requirements for a Serverless Runtime capability t
 - Visual workflow designer UI (future capability).
 - External workflow template marketplace.
 - Real-time event streaming infrastructure (assumed to exist as a separate platform capability).
-- Short-lived synchronous request/response patterns as a primary workload.
 
 ## Business Requirements (Global)
 ### P0 Requirements (Critical)
 
 ### BR-001 (P0): Runtime authoring without platform rebuild
-The system MUST allow tenants and their users to create and modify functions and workflows at runtime, such that changes can be applied without rebuilding or redeploying the platform.
+The system MUST allow application owners, tenants and their users to create, extend and modify functions and workflows at runtime, such that changes can be applied without rebuilding or redeploying the platform.
 
 ### BR-002 (P0): Tenant and user registries
 The system MUST provide a registry of functions and workflows that is isolated per tenant and supports user-level ownership/management within a tenant.
 
 ### BR-003 (P0): Long-running asynchronous execution
-The system MUST support long-running asynchronous functions and workflows, including executions lasting days (and longer where needed for business processes).
+The system MUST support long-running asynchronous functions and workflows with "zero-resource" sleep, including executions lasting days (and longer where needed for business processes).
 
 ### BR-004 (P0): Synchronous invocation for short executions
 The system MUST support synchronous request/response invocation as a first-class feature for short-running executions, where the caller receives the result (or error) in the same API response.
-This mode MUST be optional and MUST NOT replace long-running asynchronous execution as the primary workload.
 
 ### BR-005 (P0): Resource governance
 The system MUST support defining and enforcing resource limits for function/workflow execution, including:
 - CPU limits
 - memory limits
+- network access
 
 The P0 version may use runtime controlled resource isolation, not OS-level resource isolation.
 
@@ -74,10 +86,11 @@ Functions/workflows MUST support being executed under:
 - a user context (end-user / tenant-user context)
 
 ### BR-007 (P0): Trigger mechanisms
-The system MUST support starting functions/workflows via three trigger modes:
+The system MUST support starting functions/workflows via four trigger modes:
 - schedule-based triggers
 - API-triggered starts
 - event-driven triggers
+- internally as helper or extended functions via common calling mechanism
 
 ### BR-008 (P0): Runtime capabilities / integrations
 Workflows and functions MUST be able to invoke runtime-provided capabilities needed for business automation, such as:
@@ -91,6 +104,7 @@ Workflows MUST provide an integrated snapshot mechanism enabling:
 - suspend and resume behavior when waiting for events
 - survival across service restarts
 - continuation without losing progress
+- zero-resource sleep where no memory or cpu is consumed while workflow is inactive
 
 ### BR-010 (P0): Conditional logic and loops
 Workflow definitions MUST support conditional branching and loop constructs to model complex business logic.
@@ -208,6 +222,9 @@ The system MUST maintain a complete audit trail for:
 - workflow/function definition creation, modification, enable/disable, and deletion
 - execution lifecycle events (started, suspended, resumed, failed, compensated, canceled, completed)
 Audit records MUST identify the tenant, actor (system/API client/user), and correlation identifier.
+
+### BR-036 (P0): Static Traits for Dynamic Functions
+The system MUST provide application developers a mechanism to define a reusable function interface that can be bound to a dynamic function at runtime.
 
 ### P1 Requirements (Important)
 
@@ -345,6 +362,12 @@ The system SHOULD support common idempotency patterns, including idempotency key
 ### BR-135 (P1): Tenant-segmented operational metrics
 The system MUST provide operational metrics for workflow/function execution, including volume, latency, error rates, and queue/backlog indicators, and support segmentation by tenant.
 
+### BR-136 (P1): Host-Worker mode
+The system MUST provide process or OS-level isolation for worker processes, with the ability to require the worker process to use the host to interact with protected resources such as network or disk.  The host process MUST segregate secrets from the workers, which MUST NOT receive secrets.
+
+### BR-137 (P1): Hot module (re)loading
+The system MUST provide a mechanism to load native modules at runtime, and use those modules via the common calling mechanism.
+
 ### P2 Requirements (Nice-to-have)
 
 ### BR-201 (P2): Archival for long-term compliance
@@ -393,6 +416,7 @@ The system SHOULD support scale targets including:
 - **Policy enforcement/remediation**: detect drift and execute corrective actions.
 - **Data migration**: long-running copy/checkpoint/resume processes.
 - **Disaster recovery orchestration**: controlled failover/failback sequences.
+- **Dev, Build and CI jobs**: orchestrate AI development workflow.
 
 ## Acceptance Criteria (Business-Level)
 ### Workflow Execution
