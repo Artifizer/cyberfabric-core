@@ -320,8 +320,8 @@ The system MUST enforce a permission model for debugging capabilities, such that
 - platform operators can debug across tenants only via explicit operator authorization and with tenant_id and correlation_id traceability
 - sensitive inputs/outputs and secrets are access-controlled and masked by default unless explicitly permitted
 
-### BR-128 (P1): Invocation lifecycle control APIs
-The system MUST provide lifecycle controls for individual executions, including:
+### BR-128 (P1): Job lifecycle control APIs
+The system MUST provide lifecycle controls for individual execution jobs (asynchronous only), including:
 - querying execution status until completion
 - canceling an in-flight execution
 - replaying an execution for controlled recovery and incident analysis

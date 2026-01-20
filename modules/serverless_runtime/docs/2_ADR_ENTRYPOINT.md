@@ -6,8 +6,9 @@ Proposed
 ## Context
 The Serverless Runtime module needs a stable, tenant-safe way to:
 - register functions & workflows schema and code definitions at runtime
-- invoke those definitions via API
+- invoke those definitions and native functions via API, regardless of implementation language
 - observe execution progress and outcomes
+- retrieve results
 
 This ADR defines:
 - GTS-based identifiers and JSON Schema conventions for functions & workflows definitions
@@ -16,16 +17,22 @@ This ADR defines:
 
 ## Classifications
 
+### Executor
+
+An executor is a native module that executes functions and/or workflows. The pluggable executor architecture allows any native module to adapt the generic function and workflow mechanisms for a specific language or declaration format. For instance, it would be possible to have a Starlark executor and a Serverless Workflow executor which each enable a different definition language or format.
+
+Executors must support basic function execution, and may support additional workflow features as relevant.
+
 ### Function
 
-Functions are single-unit compute entrypoints designed for request/response execution:
+Functions are single-unit compute entrypoints, generally designed for request/response (synchronous) execution:
 - Stateless with respect to the runtime (any durable state is stored externally).
 - Typically short-lived (bounded by platform timeout limits).
 - Commonly used as building blocks for APIs, event handlers, and single-step jobs.
 - Retries are common; authors SHOULD design for idempotency when side effects are possible.
 
-Event waiting is supported by the platform via execution suspension and later resumption.
-For functions this is an advanced capability and is primarily relevant for asynchronous execution.
+Wait states are supported by the platform via execution suspension and later resumption, triggered by events, timers or API callbacks.
+For functions this is an advanced capability and is only available for asynchronous execution.
 
 ### Workflow
 
@@ -40,15 +47,33 @@ For workflows, the underlying code interpreter/runtime is responsible for typica
 - step identification
 - step retry scheduling and retry status
 - compensation orchestration
-- checkpointing and suspend/resume
+- checkpointing and pause/resume
 - event subscription and event-driven continuation
 
-Event waiting for workflows is implemented via suspension plus event subscription, with runtime-level examples defined in the code runtime document (e.g. Starlark).
+The common Serverless Runtime will provide reusable mechanisms such as an HTTP client with built-in retry mechanisms, registering triggers, subscribing to and emiting events, publishing stauses and checkpoints. The executor for a specific language is responsible for exposing these capabilities in an appropriate way for the language.
+
+Waiting for events, timers or callbacks in workflows is implemented via suspension and trigger registration, with runtime-level examples defined in the code runtime document (e.g. Starlark).
+
+### Functions vs. Workflows
 
 In Hyperspot, functions and workflows use the same entrypoint definition schema and the same implementation language constructs (if/else, loops, variables, etc.).
-In practice, everything is defined and invoked as a function entrypoint, and the selected runtime MAY determine that a given entrypoint should be treated as a workflow by analyzing the code during validation. For example, the Starlark runtime can validate the program and detect runtime durability primitives (e.g., checkpoints/snapshots or awaiting events/timers); if present, the runtime can apply workflow execution semantics (durable suspend/resume and continuation) rather than treating it as a regular short-lived function.
+
+All synchronous executions are processed as functions. If a workflow explicitly checkpoint during a synchronous request, it is treated as a nil operation. The reason is that with synchronous requests, the onus is on the requester to retry in case of error. Synchronous operations should have very short timeouts, requiring clients to use asynchronous jobs for any long-running operation. Short HTTP timeouts on synchronous requests is a best practice for both client and server performance.
+
+In asynchronous job mode, functions and workflows may OPTIONALLY make use of durable checkpointing provided by core modules (automatic caching of HTTP activities, avoiding re-execution for example) or may explicitly define checkpoint and restore processes within the workflow.
+
+Any function may become a workflow by using one or more of the following runtime-provided facilities:
+- Status reporting: provide information about internal progress within the function
+- Checkpointing: explicitly record domain-specific information durably for restart.
+- Wait states: make a checkpoint, then register a restart trigger. 
+
+Workflow capabilities will be silently ignored when a workflow is executed synchronously, unless a trait specifies the function as async-only - in which case the execution will fail.
+
+Wait states will always result in an explicit error in a synchronous request.
+
+In practice, everything is defined and invoked as a function entrypoint, and the selected runtime MAY determine that a given entrypoint should be treated as a workflow by analyzing the code during validation. For example, the Starlark runtime can validate the program and detect runtime durability primitives (e.g., checkpoints/snapshots or awaiting events/timers); if present, the runtime can apply workflow execution semantics (durable pause/resume and continuation) rather than treating it as a regular short-lived function.
 The practical difference is execution semantics:
-- Workflows are typically **async** and include internal snapshot/checkpoint behavior so the runtime can persist progress and support suspend/resume.
+- Workflows are typically **async** and include internal snapshot/checkpoint behavior so the runtime can persist progress and support pause/resume.
 - Functions are typically **sync**, short-lived, and stateless with respect to the runtime.
 
 ## Synchronous vs Asynchronous
@@ -60,10 +85,14 @@ Functions and workflows can be executed synchronously or asynchronously.
   - This is constrained by HTTP and gateway timeouts, so it is best for short executions.
 
 - **async**
-  - The client receives an `invocation_id` immediately and retrieves status/results later via the status endpoint.
+  - The client receives an `job_id` immediately and retrieves status/results later via the status endpoint.
   - The client “polls” for completion:
     - **Short poll**: `GET` returns immediately with the latest known status.
     - **Long poll**: `GET` waits up to a timeout before returning (otherwise identical semantics); this reduces client round-trips while still using polling.
+
+### Streaming
+
+Functions may have a long-running mode where information is streamed to/from a client or another service.  These functions are a category of asynchronous execution, receive a `job_id` that can be referenced later.  This enables them to make use of checkpointing and even restart capabilities.  Durable streams are used to allow a function to reconnect later.
 
 ## Functions & Workflows identifier conventions
 
@@ -576,6 +605,19 @@ Used for code-level failures produced by the selected runtime (e.g., Starlark va
 }
 ```
 
+### Execution status identifiers
+
+Execution status is represented as a GTS type identifier. The base status type is `gts.x.core.faas.status.v1~`, with derived types for each status value:
+
+| Status ID | Description |
+|-----------|-------------|
+| `gts.x.core.faas.status.v1~x.core._.queued.v1~` | Job accepted, waiting to start execution. |
+| `gts.x.core.faas.status.v1~x.core._.running.v1~` | Job is currently executing. |
+| `gts.x.core.faas.status.v1~x.core._.paused.v1~` | Execution paused by user request or waiting on a timer/external event. Can be resumed manually or by the runtime. |
+| `gts.x.core.faas.status.v1~x.core._.succeeded.v1~` | Execution completed successfully. Result available. |
+| `gts.x.core.faas.status.v1~x.core._.failed.v1~` | Execution failed. Error details available. |
+| `gts.x.core.faas.status.v1~x.core._.canceled.v1~` | Execution was canceled by request. |
+
 ## Examples
 ### Function definition type example #1
 
@@ -742,49 +784,390 @@ This is an example of a customer lookup function written in Starlark that:
 ```
 
 ## Invocation API (Entrypoint)
+
+The Serverless Runtime exposes two invocation surfaces:
+1. **JSON-RPC 2.0** — Synchronous request/response execution via a standard JSON-RPC endpoint.
+2. **Async Jobs API** — Asynchronous execution that mirrors the JSON-RPC request format but returns a job ID for later polling.
+
 ### Principles
-- Executed invocations produce an **invocation record** with a stable `invocation_id`.
-- Invocations SHOULD support:
-  - `Idempotency-Key` (to prevent duplicate starts)
-  - `X-Request-Id` / correlation id
-  - `traceparent` (W3C trace context)
-- Invocation status is obtained via a dedicated endpoint.
+- Synchronous invocations use standard JSON-RPC 2.0 semantics.
+- Asynchronous invocations produce a **job record** with a stable `job_id`.
+- All invocations SHOULD support:
+  - `Idempotency-Key` header (to prevent duplicate starts)
+  - `X-Request-Id` / correlation id header
+  - `traceparent` header (W3C trace context)
 
 Throttling and rate limiting:
 - The runtime SHOULD enforce throttling to protect itself and downstream dependencies (e.g., per-tenant rate limits, per-entrypoint concurrency caps).
-- When throttled, the runtime SHOULD return `429 Too Many Requests` and SHOULD include `Retry-After`.
+- When throttled, the runtime SHOULD return HTTP `429 Too Many Requests` and SHOULD include `Retry-After`.
 
-Dry run vs execute:
-- `dry_run: true` performs validation (including authorization) without creating a durable invocation record.
+Dry run:
+- `dry_run: true` in params performs validation (including authorization) without execution or creating a durable job record.
 - This aligns with AWS Lambda `InvocationType=DryRun`.
 
-### 1) Invoke an entrypoint (sync or async)
-`POST /api/serverless-runtime/v1/invocations`
+---
 
-Request body:
+## JSON-RPC API (Synchronous)
+
+### Endpoint
+`POST /api/serverless-runtime/v1/rpc`
+
+All synchronous invocations use JSON-RPC 2.0 over HTTP POST. The method name is the entrypoint GTS ID.
+
+### Request format
 ```json
 {
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "params": {},
-  "mode": "async",
-  "dry_run": false
+  "jsonrpc": "2.0",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "params": {
+    "invoice_total": 100.00,
+    "region": "US-CA"
+  },
+  "id": "req-12345"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `jsonrpc` | string | Must be `"2.0"`. |
+| `method` | string | The entrypoint GTS ID to invoke. |
+| `params` | object | Input parameters matching the entrypoint's `params` schema. May include `dry_run: true` to validate without executing. |
+| `id` | string \| number | Client-provided request identifier. Returned in response. |
+
+### Success response
+`200 OK`
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "tax": 7.25
+  },
+  "id": "req-12345"
+}
+```
+
+### Error response (entrypoint execution error)
+`200 OK`
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Upstream CRM returned non-success status",
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.http.v1~",
+      "details": {
+        "status_code": 503,
+        "headers": {"content-type": "application/json"},
+        "body": {"error": "service_unavailable"}
+      },
+      "observability": {
+        "correlation_id": "<id>",
+        "trace_id": "<trace>",
+        "metrics": {
+          "duration_ms": 110,
+          "billed_duration_ms": 200,
+          "cpu_time_ms": 70,
+          "memory_limit_mb": 128,
+          "max_memory_used_mb": 64
+        }
+      }
+    }
+  },
+  "id": "req-12345"
+}
+```
+
+### Error response (code execution error)
+`200 OK`
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Starlark execution error: division by zero",
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.code.v1~",
+      "details": {
+        "runtime": "starlark",
+        "phase": "execute",
+        "error_kind": "division_by_zero",
+        "location": {"line": 12, "code": "x = 1 / 0"},
+        "stack": {
+          "frames": [
+            {"function": "main", "file": "inline", "line": 1},
+            {"function": "calculate", "file": "inline", "line": 12}
+          ]
+        }
+      },
+      "observability": {
+        "correlation_id": "<id>",
+        "trace_id": "<trace>",
+        "metrics": {
+          "duration_ms": 10,
+          "billed_duration_ms": 100,
+          "cpu_time_ms": 8,
+          "memory_limit_mb": 128,
+          "max_memory_used_mb": 24
+        }
+      }
+    }
+  },
+  "id": "req-12345"
+}
+```
+
+### Error response (runtime timeout)
+`200 OK`
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": -32000,
+    "message": "Execution timed out",
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.timeout.v1~",
+      "details": {
+        "limit": {"timeout_seconds": 5},
+        "observed": {"duration_ms": 5000, "cpu_time_ms": 4900, "max_memory_used_mb": 90}
+      },
+      "observability": {
+        "correlation_id": "<id>",
+        "trace_id": "<trace>",
+        "metrics": {
+          "duration_ms": 5000,
+          "billed_duration_ms": 5000,
+          "cpu_time_ms": 4900,
+          "memory_limit_mb": 128,
+          "max_memory_used_mb": 90
+        }
+      }
+    }
+  },
+  "id": "req-12345"
+}
+```
+
+### Standard JSON-RPC error codes
+| Code | Message | Description |
+|------|---------|-------------|
+| `-32700` | Parse error | Invalid JSON was received. |
+| `-32600` | Invalid Request | The JSON sent is not a valid Request object. |
+| `-32601` | Method not found | The entrypoint does not exist or is not callable. |
+| `-32602` | Invalid params | Invalid method parameter(s) — schema validation failed. |
+| `-32603` | Internal error | Internal JSON-RPC error. |
+| `-32000` | Server error | Application-level error (entrypoint execution failure). Details in `data`. |
+
+### Dry run response
+When `params` includes `dry_run: true`:
+`200 OK`
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "dry_run": true,
+    "valid": true
+  },
+  "id": "req-12345"
+}
+```
+
+### Batch requests
+JSON-RPC 2.0 batch requests are supported. Send an array of request objects:
+```json
+[
+  {"jsonrpc": "2.0", "method": "gts.x.core.faas.func.v1~vendor.app.billing.calculate_tax.v1~", "params": {"invoice_total": 100, "region": "US-CA"}, "id": "1"},
+  {"jsonrpc": "2.0", "method": "gts.x.core.faas.func.v1~vendor.app.crm.lookup_customer.v1~", "params": {"customer_id": "c_123"}, "id": "2"}
+]
+```
+
+Response is an array of response objects (order may differ):
+```json
+[
+  {"jsonrpc": "2.0", "result": {"tax": 7.25}, "id": "1"},
+  {"jsonrpc": "2.0", "result": {"customer": {"id": "c_123", "name": "Jane"}}, "id": "2"}
+]
+```
+
+---
+
+## Async Jobs API
+
+The Async Jobs API mirrors the JSON-RPC request format but immediately returns a job ID instead of waiting for completion. Use this for long-running operations or when you want fire-and-forget semantics with optional polling.
+
+### 1) Submit async job
+`POST /api/serverless-runtime/v1/jobs`
+
+Request body (mirrors JSON-RPC structure):
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "params": {
+    "invoice_total": 100.00,
+    "region": "US-CA"
+  },
+  "id": "client-correlation-123"
 }
 ```
 
 Response:
-- `200 OK` (when `mode` is `sync` and `dry_run` is false) — **InvocationRecord (completed)**
+`202 Accepted`
 ```json
 {
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.succeeded.v1",
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.queued.v1~",
+  "client_id": "client-correlation-123",
+  "timestamps": {
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "started_at": null,
+    "finished_at": null
+  },
+  "result": null,
+  "error": null,
+  "observability": {
+    "correlation_id": "<id>",
+    "trace_id": "<trace>",
+    "metrics": null
+  }
+}
+```
+
+### 2) List jobs
+`GET /api/serverless-runtime/v1/jobs`
+
+Returns a paginated list of jobs matching the specified filters. Supports filtering by status, time range, entrypoint, and correlation identifier.
+
+Query params:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `status` | string | Filter by status GTS ID (e.g., `gts.x.core.faas.status.v1~x.core._.running.v1~`). Supports multiple values comma-separated. |
+| `method` | string | Filter by entrypoint GTS ID. |
+| `created_after` | string (ISO 8601) | Return jobs created at or after this timestamp. |
+| `created_before` | string (ISO 8601) | Return jobs created before this timestamp. |
+| `correlation_id` | string | Filter by correlation identifier. |
+| `client_id` | string | Filter by client-provided request ID. |
+| `limit` | integer | Maximum number of results (default: 25, max: 100). |
+| `cursor` | string | Pagination cursor from previous response. |
+
+Response:
+`200 OK`
+```json
+{
+  "items": [
+    {
+      "job_id": "<opaque-job-id-1>",
+      "method": "gts.x.core.faas.func.v1~vendor.app.billing.calculate_tax.v1~",
+      "status": "gts.x.core.faas.status.v1~x.core._.succeeded.v1~",
+      "client_id": "client-correlation-123",
+      "timestamps": {
+        "created_at": "2026-01-01T00:00:00.000Z",
+        "started_at": "2026-01-01T00:00:00.010Z",
+        "finished_at": "2026-01-01T00:00:00.120Z"
+      },
+      "observability": {
+        "correlation_id": "<id>",
+        "trace_id": "<trace>"
+      }
+    },
+    {
+      "job_id": "<opaque-job-id-2>",
+      "method": "gts.x.core.faas.func.v1~vendor.app.crm.lookup_customer.v1~",
+      "status": "gts.x.core.faas.status.v1~x.core._.running.v1~",
+      "client_id": "client-correlation-456",
+      "timestamps": {
+        "created_at": "2026-01-01T00:00:01.000Z",
+        "started_at": "2026-01-01T00:00:01.010Z",
+        "finished_at": null
+      },
+      "observability": {
+        "correlation_id": "<id>",
+        "trace_id": "<trace>"
+      }
+    }
+  ],
+  "page_info": {
+    "next_cursor": "<opaque-cursor>",
+    "prev_cursor": null,
+    "limit": 25,
+    "total_count": 142
+  }
+}
+```
+
+Note: The list response includes summary information for each job. To retrieve full job details including `result`, `error`, and `observability.metrics`, use `GET /jobs/{job_id}`.
+
+### 3) Get job status
+`GET /api/serverless-runtime/v1/jobs/{job_id}`
+
+Response — **Job queued**:
+`200 OK`
+```json
+{
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.queued.v1~",
+  "client_id": "client-correlation-123",
+  "timestamps": {
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "started_at": null,
+    "finished_at": null
+  },
+  "result": null,
+  "error": null,
+  "observability": {
+    "correlation_id": "<id>",
+    "trace_id": "<trace>",
+    "metrics": null
+  }
+}
+```
+
+Response — **Job running**:
+`200 OK`
+```json
+{
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.running.v1~",
+  "client_id": "client-correlation-123",
+  "timestamps": {
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "started_at": "2026-01-01T00:00:00.010Z",
+    "finished_at": null
+  },
+  "result": null,
+  "error": null,
+  "observability": {
+    "correlation_id": "<id>",
+    "trace_id": "<trace>",
+    "metrics": {
+      "duration_ms": null,
+      "billed_duration_ms": null,
+      "cpu_time_ms": null,
+      "memory_limit_mb": 128,
+      "max_memory_used_mb": null
+    }
+  }
+}
+```
+
+Response — **Job succeeded**:
+`200 OK`
+```json
+{
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.succeeded.v1~",
+  "client_id": "client-correlation-123",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
     "started_at": "2026-01-01T00:00:00.010Z",
     "finished_at": "2026-01-01T00:00:00.120Z"
   },
   "result": {
-    "tax": 0
+    "tax": 7.25
   },
   "error": null,
   "observability": {
@@ -801,125 +1184,14 @@ Response:
 }
 ```
 
-- `200 OK` (when `mode` is `sync` and `dry_run` is false) — **InvocationRecord (failed)**
+Response — **Job failed (code error)**:
+`200 OK`
 ```json
 {
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.crm.lookup_customer.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1",
-  "timestamps": {
-    "created_at": "2026-01-01T00:00:00.000Z",
-    "started_at": "2026-01-01T00:00:00.010Z",
-    "finished_at": "2026-01-01T00:00:00.120Z"
-  },
-  "result": null,
-  "error": {
-    "id": "gts.x.core.faas.err.v1~x.core._.http.v1~",
-    "message": "Upstream CRM returned non-success status",
-    "details": {
-      "status_code": 503,
-      "headers": {"content-type": "application/json"},
-      "body": {"error": "service_unavailable"}
-    }
-  },
-  "observability": {
-    "correlation_id": "<id>",
-    "trace_id": "<trace>",
-    "metrics": {
-      "duration_ms": 110,
-      "billed_duration_ms": 200,
-      "cpu_time_ms": 70,
-      "memory_limit_mb": 128,
-      "max_memory_used_mb": 64
-    }
-  }
-}
-```
-
-- `202 Accepted` (when `mode` is `async` and `dry_run` is false) — **InvocationRecord (pending)**
-```json
-{
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.queued.v1",
-  "timestamps": {
-    "created_at": "2026-01-01T00:00:00.000Z",
-    "started_at": null,
-    "finished_at": null
-  },
-  "result": null,
-  "error": null,
-  "observability": {
-    "correlation_id": "<id>",
-    "trace_id": "<trace>",
-    "metrics": {
-      "duration_ms": null,
-      "billed_duration_ms": null,
-      "cpu_time_ms": null,
-      "memory_limit_mb": 128,
-      "max_memory_used_mb": null
-    }
-  }
-}
-```
-
-- `200 OK` (when `dry_run` is true)
-```json
-{
-  "dry_run": true,
-  "result": {},
-  "error": null,
-  "observability": {
-    "correlation_id": "<id>",
-    "trace_id": "<trace>",
-    "metrics": {
-      "duration_ms": null,
-      "billed_duration_ms": null,
-      "cpu_time_ms": null,
-      "memory_limit_mb": null,
-      "max_memory_used_mb": null
-    }
-  }
-}
-```
-
-### 2) Get invocation status
-`GET /api/serverless-runtime/v1/invocations/{invocation_id}`
-
-Response:
-- `200 OK` — **InvocationRecord (pending)**
-```json
-{
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.queued.v1",
-  "timestamps": {
-    "created_at": "2026-01-01T00:00:00.000Z",
-    "started_at": null,
-    "finished_at": null
-  },
-  "result": null,
-  "error": null,
-  "observability": {
-    "correlation_id": "<id>",
-    "trace_id": "<trace>",
-    "metrics": {
-      "duration_ms": null,
-      "billed_duration_ms": null,
-      "cpu_time_ms": null,
-      "memory_limit_mb": 128,
-      "max_memory_used_mb": null
-    }
-  }
-}
-```
-
-- `200 OK` — **InvocationRecord (failed: code error)**
-```json
-{
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.billing.calculate_tax.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1",
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.billing.calculate_tax.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1~",
+  "client_id": "client-correlation-123",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
     "started_at": "2026-01-01T00:00:00.010Z",
@@ -927,18 +1199,21 @@ Response:
   },
   "result": null,
   "error": {
-    "id": "gts.x.core.faas.err.v1~x.core._.code.v1~",
+    "code": -32000,
     "message": "Starlark execution error: division by zero",
-    "details": {
-      "runtime": "starlark",
-      "phase": "execute",
-      "error_kind": "division_by_zero",
-      "location": {"line": 12, "code": "x = 1 / 0"},
-      "stack": {
-        "frames": [
-          {"function": "main", "file": "inline", "line": 1},
-          {"function": "calculate", "file": "inline", "line": 12}
-        ]
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.code.v1~",
+      "details": {
+        "runtime": "starlark",
+        "phase": "execute",
+        "error_kind": "division_by_zero",
+        "location": {"line": 12, "code": "x = 1 / 0"},
+        "stack": {
+          "frames": [
+            {"function": "main", "file": "inline", "line": 1},
+            {"function": "calculate", "file": "inline", "line": 12}
+          ]
+        }
       }
     }
   },
@@ -956,12 +1231,14 @@ Response:
 }
 ```
 
-- `200 OK` — **InvocationRecord (failed: runtime timeout)**
+Response — **Job failed (runtime timeout)**:
+`200 OK`
 ```json
 {
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1",
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1~",
+  "client_id": "client-correlation-123",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
     "started_at": "2026-01-01T00:00:00.010Z",
@@ -969,11 +1246,14 @@ Response:
   },
   "result": null,
   "error": {
-    "id": "gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.timeout.v1~",
+    "code": -32000,
     "message": "Execution timed out",
-    "details": {
-      "limit": {"timeout_seconds": 5},
-      "observed": {"duration_ms": 5000, "cpu_time_ms": 4900, "max_memory_used_mb": 90}
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.timeout.v1~",
+      "details": {
+        "limit": {"timeout_seconds": 5},
+        "observed": {"duration_ms": 5000, "cpu_time_ms": 4900, "max_memory_used_mb": 90}
+      }
     }
   },
   "observability": {
@@ -990,12 +1270,14 @@ Response:
 }
 ```
 
-- `200 OK` — **InvocationRecord (failed: upstream no connection)**
+Response — **Job failed (upstream no connection)**:
+`200 OK`
 ```json
 {
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.crm.lookup_customer.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1",
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.crm.lookup_customer.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.failed.v1~",
+  "client_id": "client-correlation-123",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
     "started_at": "2026-01-01T00:00:00.010Z",
@@ -1003,10 +1285,13 @@ Response:
   },
   "result": null,
   "error": {
-    "id": "gts.x.core.faas.err.v1~x.core._.http_transport.v1~x.core._.no_connection.v1~",
+    "code": -32000,
     "message": "Upstream HTTP request failed",
-    "details": {
-      "url": "https://example.crm/api/customers/123"
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.http_transport.v1~x.core._.no_connection.v1~",
+      "details": {
+        "url": "https://example.crm/api/customers/123"
+      }
     }
   },
   "observability": {
@@ -1023,51 +1308,240 @@ Response:
 }
 ```
 
-- `200 OK` — **InvocationRecord (completed)**
+Response — **Job paused** (waiting on timer/event or user-paused):
+`200 OK`
 ```json
 {
-  "invocation_id": "<opaque-id>",
-  "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.succeeded.v1",
+  "job_id": "<opaque-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.paused.v1~",
+  "client_id": "client-correlation-123",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
-    "started_at": "2026-01-01T00:00:01.000Z",
-    "finished_at": "2026-01-01T00:00:02.000Z"
+    "started_at": "2026-01-01T00:00:00.010Z",
+    "finished_at": null
   },
-  "result": {},
+  "result": null,
   "error": null,
   "observability": {
     "correlation_id": "<id>",
     "trace_id": "<trace>",
     "metrics": {
-      "duration_ms": 1000,
-      "billed_duration_ms": 1000,
-      "cpu_time_ms": 620,
+      "duration_ms": 50,
+      "billed_duration_ms": 100,
+      "cpu_time_ms": 40,
       "memory_limit_mb": 128,
-      "max_memory_used_mb": 80
+      "max_memory_used_mb": 32
     }
   }
 }
 ```
 
-Status values:
-- `gts.x.core.faas.status.v1~x.core._.queued.v1`
-- `gts.x.core.faas.status.v1~x.core._.running.v1`
-- `gts.x.core.faas.status.v1~x.core._.suspended.v1`
-- `gts.x.core.faas.status.v1~x.core._.succeeded.v1`
-- `gts.x.core.faas.status.v1~x.core._.failed.v1`
-- `gts.x.core.faas.status.v1~x.core._.canceled.v1`
+### 4) Get job result (convenience endpoint)
+`GET /api/serverless-runtime/v1/jobs/{job_id}/result`
 
-`gts.x.core.faas.status.v1~x.core._.suspended.v1` indicates execution is waiting on a timer or an external event subscription and will be resumed by the runtime.
+Returns only the result payload when the job has succeeded. Useful for clients that only care about the final output.
 
-### 3) Cancel function/workflow execution
-`POST /api/serverless-runtime/v1/invocations/{invocation_id}:cancel`
+Response — **Job succeeded**:
+`200 OK`
+```json
+{
+  "tax": 7.25
+}
+```
+
+Response — **Job not finished**:
+`409 Conflict`
+```json
+{
+  "error": "job_not_finished",
+  "message": "Job is still in progress",
+  "status": "gts.x.core.faas.status.v1~x.core._.running.v1~"
+}
+```
+
+Response — **Job failed**:
+`200 OK` with JSON-RPC error structure:
+```json
+{
+  "error": {
+    "code": -32000,
+    "message": "Starlark execution error: division by zero",
+    "data": {
+      "id": "gts.x.core.faas.err.v1~x.core._.code.v1~",
+      "details": {
+        "runtime": "starlark",
+        "phase": "execute",
+        "error_kind": "division_by_zero",
+        "location": {"line": 12, "code": "x = 1 / 0"},
+        "stack": {
+          "frames": [
+            {"function": "main", "file": "inline", "line": 1},
+            {"function": "calculate", "file": "inline", "line": 12}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+### 5) Cancel job
+`POST /api/serverless-runtime/v1/jobs/{job_id}:cancel`
+
+Requests cancellation of an in-flight job. The runtime will attempt to stop execution gracefully. If the job is not in a cancelable state (e.g., already completed, failed, or canceled), the request returns an error.
 
 Response:
-- `202 Accepted`
+`202 Accepted`
+```json
+{
+  "job_id": "<opaque-job-id>",
+  "status": "gts.x.core.faas.status.v1~x.core._.canceled.v1~",
+  "message": "Cancellation requested"
+}
+```
 
-### 4) Timeline / step history (observability)
-`GET /api/serverless-runtime/v1/invocations/{invocation_id}/timeline`
+Response — **Job not cancelable**:
+`409 Conflict`
+```json
+{
+  "error": "job_not_cancelable",
+  "message": "Job cannot be canceled in its current state",
+  "status": "gts.x.core.faas.status.v1~x.core._.succeeded.v1~"
+}
+```
+
+### 6) Replay job
+`POST /api/serverless-runtime/v1/jobs/{job_id}:replay`
+
+Creates a new job that re-executes the same entrypoint with the same input parameters as the original job. Useful for debugging, incident analysis, and controlled recovery after failures.
+
+The replay creates a **new job** with a new `job_id`. The original job remains unchanged for audit purposes.
+
+Request body (optional overrides):
+```json
+{
+  "params_override": {
+    "region": "US-NY"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `params_override` | object | (Optional) Partial parameter overrides to merge with the original params. |
+
+Response:
+`202 Accepted`
+```json
+{
+  "job_id": "<new-job-id>",
+  "replayed_from": "<original-job-id>",
+  "method": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
+  "status": "gts.x.core.faas.status.v1~x.core._.queued.v1~",
+  "client_id": "client-correlation-123",
+  "timestamps": {
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "started_at": null,
+    "finished_at": null
+  },
+  "result": null,
+  "error": null,
+  "observability": {
+    "correlation_id": "<id>",
+    "trace_id": "<trace>",
+    "metrics": null
+  }
+}
+```
+
+Response — **Original job not found**:
+`404 Not Found`
+```json
+{
+  "error": "job_not_found",
+  "message": "The specified job does not exist or has been purged.",
+  "status": null
+}
+```
+
+### 7) Pause job
+`POST /api/serverless-runtime/v1/jobs/{job_id}:pause`
+
+Requests the runtime to pause an in-flight job at the next safe checkpoint. The job will transition to `paused` status and can be resumed later. If the job is not in a pausable state (e.g., already completed, canceled, or paused), the request returns an error.
+
+Response:
+`202 Accepted`
+```json
+{
+  "job_id": "<opaque-job-id>",
+  "status": "gts.x.core.faas.status.v1~x.core._.paused.v1~",
+  "message": "Pause requested"
+}
+```
+
+Response — **Job not pausable**:
+`409 Conflict`
+```json
+{
+  "error": "job_not_pausable",
+  "message": "Job cannot be paused in its current state",
+  "status": "gts.x.core.faas.status.v1~x.core._.succeeded.v1~"
+}
+```
+
+### 8) Resume job
+`POST /api/serverless-runtime/v1/jobs/{job_id}:resume`
+
+Resumes a paused job. The job will transition back to `running` status and continue execution from its last checkpoint. If the job is not in `paused` status, the request returns an error.
+
+Response:
+`202 Accepted`
+```json
+{
+  "job_id": "<opaque-job-id>",
+  "status": "gts.x.core.faas.status.v1~x.core._.running.v1~",
+  "message": "Resume requested"
+}
+```
+
+Response — **Job not paused**:
+`409 Conflict`
+```json
+{
+  "error": "job_not_paused",
+  "message": "Job is not in paused state",
+  "status": "gts.x.core.faas.status.v1~x.core._.running.v1~"
+}
+```
+
+### Job status values
+
+See [Execution status identifiers](#execution-status-identifiers) for full descriptions.
+
+| Status ID (short form) | GTS ID |
+|------------------------|--------|
+| `queued` | `gts.x.core.faas.status.v1~x.core._.queued.v1~` |
+| `running` | `gts.x.core.faas.status.v1~x.core._.running.v1~` |
+| `paused` | `gts.x.core.faas.status.v1~x.core._.paused.v1~` |
+| `succeeded` | `gts.x.core.faas.status.v1~x.core._.succeeded.v1~` |
+| `failed` | `gts.x.core.faas.status.v1~x.core._.failed.v1~` |
+| `canceled` | `gts.x.core.faas.status.v1~x.core._.canceled.v1~` |
+
+---
+
+## Executions API (Observability)
+
+Every execution — whether synchronous (JSON-RPC) or asynchronous (Jobs API) — produces an **execution record** identified by an `execution_id`. This ID can be used to retrieve observability data after execution completes or while it is in progress.
+
+**How to obtain the `execution_id`:**
+- **Synchronous (JSON-RPC)**: The `execution_id` is returned in the `X-Execution-Id` response header.
+- **Asynchronous (Jobs API)**: The `job_id` returned by the Jobs API is also the `execution_id`, and is returned in the `X-Execution-Id` header.
+
+The Executions API provides read-only access to execution history, debugging information, and execution traces.
+
+### 1) Timeline / step history
+`GET /api/serverless-runtime/v1/executions/{execution_id}/timeline`
 
 Query params:
 - `limit` (optional)
@@ -1076,7 +1550,7 @@ Query params:
 Response (example):
 ```json
 {
-  "invocation_id": "<opaque-id>",
+  "execution_id": "<opaque-id>",
   "items": [
     {"at": "2026-01-01T00:00:00Z", "type": "STARTED"},
     {"at": "2026-01-01T00:00:01Z", "type": "STEP_STARTED", "step_id": "step-1"},
@@ -1090,15 +1564,15 @@ Response (example):
 }
 ```
 
-### 5) Debug invocation (invocation record + debug info)
-`GET /api/serverless-runtime/v1/invocations/{invocation_id}/debug`
+### 2) Debug execution
+`GET /api/serverless-runtime/v1/executions/{execution_id}/debug`
 
 Response (example):
 ```json
 {
-  "invocation_id": "<opaque-id>",
+  "execution_id": "<opaque-id>",
   "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.running.v1",
+  "status": "gts.x.core.faas.status.v1~x.core._.running.v1~",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
     "started_at": "2026-01-01T00:00:00.010Z",
@@ -1132,8 +1606,8 @@ Response (example):
 }
 ```
 
-Call trace retrieval (paginated via `debug.page`):
-`GET /api/serverless-runtime/v1/invocations/{invocation_id}/debug/calls`
+### 3) Execution trace
+`GET /api/serverless-runtime/v1/executions/{execution_id}/trace`
 
 Query params:
 - `limit` (optional)
@@ -1142,9 +1616,9 @@ Query params:
 Response (example):
 ```json
 {
-  "invocation_id": "<opaque-id>",
+  "execution_id": "<opaque-id>",
   "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.namespace.func_name.v1~",
-  "status": "gts.x.core.faas.status.v1~x.core._.running.v1",
+  "status": "gts.x.core.faas.status.v1~x.core._.running.v1~",
   "timestamps": {
     "created_at": "2026-01-01T00:00:00.000Z",
     "started_at": "2026-01-01T00:00:00.010Z",
@@ -1177,7 +1651,7 @@ Response (example):
     "page": {
       "items": [
         {
-          "call_invocation_id": "<opaque-id>",
+          "call_execution_id": "<opaque-id>",
           "entrypoint_id": "gts.x.core.faas.func.v1~vendor.app.crm.lookup_customer.v1~",
           "params": {"customer_id": "c_123"},
           "duration_ms": 42,
@@ -1216,7 +1690,7 @@ Notes:
 |---|---|---|---|---|
 | Definition type model | Unified entrypoint definition schema (function/workflow) via GTS-identified JSON Schemas | Split: Lambda functions vs Step Functions state machines | Split: Cloud Functions vs Workflows | Split: Functions vs Durable orchestrations |
 | Type system / schema IDs | GTS identifiers for base + derived definition types | No first-class type IDs; resource ARNs + service-specific specs | No first-class type IDs; resource names + service-specific specs | No first-class type IDs; resource IDs + service-specific specs |
-| Versioning concept | Definitions are versioned types; invocations point to an explicit definition ID | Lambda versions/aliases; Step Functions revisions via updates | Function revisions; workflow updates | Function versions; durable orchestration code deployments |
+| Versioning concept | Definitions are versioned types; executions reference an explicit definition ID | Lambda versions/aliases; Step Functions revisions via updates | Function revisions; workflow updates | Function versions; durable orchestration code deployments |
 
 ### Category: Invocation semantics and lifecycle
 
@@ -1225,9 +1699,10 @@ Notes:
 | Sync invocation | Supported (`mode: sync`) | Lambda: `RequestResponse` | HTTP-triggered functions are synchronous by default | HTTP-triggered functions are synchronous by default |
 | Async invocation | Supported (`mode: async` + poll status) | Lambda: `Event`; Step Functions: start execution then poll/described execution | Workflows: start execution then poll; Functions: async via events/pubsub | Durable: start orchestration then query status |
 | Dry-run | Supported (`dry_run: true`) without durable record | Lambda: `DryRun` (permission check) | Generally via validation/testing tools rather than a single universal API | Generally via validation/testing tools rather than a single universal API |
-| Durable invocation record shape | Unified `InvocationRecord` for start + status + debug | Different response shapes per service | Different response shapes per service | Different response shapes per service |
+| Durable execution record shape | Unified `ExecutionRecord` for start + status + debug | Different response shapes per service | Different response shapes per service | Different response shapes per service |
 | Cancel | Supported (`:cancel`) | Step Functions: stop execution; Lambda: no “cancel running invocation” | Workflows: cancel execution; Functions: stop depends on trigger/runtime | Durable: terminate instance |
-| Suspend/resume (event waiting) | Supported (`status: suspended`) for timers and event-driven continuation | Step Functions: wait states + event-driven patterns; Lambda: event-driven via triggers | Workflows support waiting; functions are event-triggered or use separate services | Durable: timers + external events |
+| Replay | Supported (`:replay`) creates new job from original params | Step Functions: redrive or re-execute manually | Workflows: re-execute manually | Durable: rewind or restart orchestration |
+| Pause/resume | Supported (`:pause`, `:resume`) with `status: paused` for user-initiated pause or waiting on timers/external events | Step Functions: wait states + event-driven patterns; Lambda: event-driven via triggers | Workflows support waiting; functions are event-triggered or use separate services | Durable: timers + external events |
 | Idempotency | Supported via idempotency key on start | Step Functions supports idempotency via execution name constraints; Lambda typically handled externally | Typically handled externally per trigger/service | Typically handled externally per trigger/service |
 
 ### Category: Observability and timeline
@@ -1242,9 +1717,9 @@ Notes:
 
 | Capability | Hyperspot Serverless Runtime | AWS | Google Cloud | Azure |
 |---|---|---|---|---|
-| Debug endpoint | `GET /debug` returns `InvocationRecord` + `debug` section (`location`, `stack`) | No single universal debug endpoint; relies on logs, traces, and per-service UIs | No single universal debug endpoint; relies on logs/traces/UIs | No single universal debug endpoint; relies on logs/App Insights/Durable history |
-| Call trace (ordered) | `GET /debug/calls` returns the same shape as `GET /debug`, with `debug.page` containing a paginated ordered call list including params, duration, and exact response | Achievable via X-Ray subsegments/instrumentation; not a standard structured API output | Achievable via tracing/instrumentation; not a standard structured API output | Achievable via Durable history/instrumentation; not a standard structured API output |
-| Completed-execution debug | Supported (`GET /debug` with `location`/`stack` null; `GET /debug/calls` for full trace via `debug.page`) | Historical logs/traces; UI varies by service | Historical logs/traces; UI varies by service | Historical logs/traces; durable history |
+| Debug endpoint | `GET /executions/{id}/debug` returns execution record + `debug` section (`location`, `stack`) | No single universal debug endpoint; relies on logs, traces, and per-service UIs | No single universal debug endpoint; relies on logs/traces/UIs | No single universal debug endpoint; relies on logs/App Insights/Durable history |
+| Execution trace | `GET /executions/{id}/trace` returns paginated ordered call list including params, duration, and exact response | Achievable via X-Ray subsegments/instrumentation; not a standard structured API output | Achievable via tracing/instrumentation; not a standard structured API output | Achievable via Durable history/instrumentation; not a standard structured API output |
+| Completed-execution debug | Supported (`GET /debug` with `location`/`stack` null; `GET /trace` for full trace) | Historical logs/traces; UI varies by service | Historical logs/traces; UI varies by service | Historical logs/traces; durable history |
 
 ### Category: Error taxonomy
 
