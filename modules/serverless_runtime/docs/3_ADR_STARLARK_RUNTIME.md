@@ -14,7 +14,7 @@ This ADR defines the design of the Starlark runtime implementation used to execu
 - workflow orchestration hooks (steps, retries, compensation, snapshots, event waiting)
 - example definitions and Starlark programs for functions and workflows
 
-This ADR is intentionally aligned with `2_ADR_ENTRYPOINT.md` (Entrypoint schema + Invocation API).
+This ADR is intentionally aligned with `2_ADR_FUNCTION_ENTRYPOINT.md` (Entrypoint schema + Invocation API).
 
 ## Why Starlark?
 
@@ -173,7 +173,7 @@ Successful response:
 
 Error response:
 - `ok` (boolean, `false`)
-- `error` (a Starlark `struct(...)`) compatible with the runtime error envelope defined in `2_ADR_ENTRYPOINT.md`.
+- `error` (a Starlark `struct(...)`) compatible with the runtime error envelope defined in `2_ADR_FUNCTION_ENTRYPOINT.md`.
   - for non-2xx upstream responses: `gts.x.core.faas.err.v1~x.core._.http.v1~`
   - for upstream transport failures: `gts.x.core.faas.err.v1~x.core._.http_transport.v1~x.core._.timeout.v1~` and `gts.x.core.faas.err.v1~x.core._.http_transport.v1~x.core._.no_connection.v1~`
   - for runtime failures: `gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.timeout.v1~`, `gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.memory_limit.v1~`, `gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.cpu_limit.v1~`, and `gts.x.core.faas.err.v1~x.core._.runtime.v1~x.core._.canceled.v1~`

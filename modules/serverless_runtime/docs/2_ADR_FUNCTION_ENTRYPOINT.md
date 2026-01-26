@@ -50,7 +50,7 @@ For workflows, the underlying code interpreter/runtime is responsible for typica
 - checkpointing and pause/resume
 - event subscription and event-driven continuation
 
-The common Serverless Runtime will provide reusable mechanisms such as an HTTP client with built-in retry mechanisms, registering triggers, subscribing to and emiting events, publishing stauses and checkpoints. The executor for a specific language is responsible for exposing these capabilities in an appropriate way for the language.
+The common Serverless Runtime will provide reusable mechanisms such as an HTTP client with built-in retry mechanisms, registering triggers, subscribing to and emitting events, publishing statuses and checkpoints. The executor for a specific language is responsible for exposing these capabilities in an appropriate way for the language.
 
 Waiting for events, timers or callbacks in workflows is implemented via suspension and trigger registration, with runtime-level examples defined in the code runtime document (e.g. Starlark).
 
@@ -85,10 +85,7 @@ Functions and workflows can be executed synchronously or asynchronously.
   - This is constrained by HTTP and gateway timeouts, so it is best for short executions.
 
 - **async**
-  - The client receives an `job_id` immediately and retrieves status/results later via the status endpoint.
-  - The client “polls” for completion:
-    - **Short poll**: `GET` returns immediately with the latest known status.
-    - **Long poll**: `GET` waits up to a timeout before returning (otherwise identical semantics); this reduces client round-trips while still using polling.
+  - The client receives a `job_id` immediately and retrieves status/results later via the status endpoint.
 
 ### Streaming
 
@@ -164,7 +161,7 @@ Main schema elements are:
       "type": "array",
       "items": {"type": "string"},
       "default": [],
-      "description": "List of possible customerror type identifiers (GTS IDs)."
+      "description": "List of possible custom error type identifiers (GTS IDs)."
     },
 
     "traits": {
@@ -1696,10 +1693,10 @@ Notes:
 
 | Capability | Hyperspot Serverless Runtime | AWS | Google Cloud | Azure |
 |---|---|---|---|---|
-| Sync invocation | Supported (`mode: sync`) | Lambda: `RequestResponse` | HTTP-triggered functions are synchronous by default | HTTP-triggered functions are synchronous by default |
-| Async invocation | Supported (`mode: async` + poll status) | Lambda: `Event`; Step Functions: start execution then poll/described execution | Workflows: start execution then poll; Functions: async via events/pubsub | Durable: start orchestration then query status |
+| Sync invocation | Supported via JSON-RPC endpoint (when `traits.invocation.supported` includes `sync`) | Lambda: `RequestResponse` | HTTP-triggered functions are synchronous by default | HTTP-triggered functions are synchronous by default |
+| Async invocation | Supported via Jobs API (when `traits.invocation.supported` includes `async`) + poll status | Lambda: `Event`; Step Functions: start execution then poll/described execution | Workflows: start execution then poll; Functions: async via events/pubsub | Durable: start orchestration then query status |
 | Dry-run | Supported (`dry_run: true`) without durable record | Lambda: `DryRun` (permission check) | Generally via validation/testing tools rather than a single universal API | Generally via validation/testing tools rather than a single universal API |
-| Durable execution record shape | Unified `ExecutionRecord` for start + status + debug | Different response shapes per service | Different response shapes per service | Different response shapes per service |
+| Durable execution record shape | Unified job record structure for start, status, and debug | Different response shapes per service | Different response shapes per service | Different response shapes per service |
 | Cancel | Supported (`:cancel`) | Step Functions: stop execution; Lambda: no “cancel running invocation” | Workflows: cancel execution; Functions: stop depends on trigger/runtime | Durable: terminate instance |
 | Replay | Supported (`:replay`) creates new job from original params | Step Functions: redrive or re-execute manually | Workflows: re-execute manually | Durable: rewind or restart orchestration |
 | Pause/resume | Supported (`:pause`, `:resume`) with `status: paused` for user-initiated pause or waiting on timers/external events | Step Functions: wait states + event-driven patterns; Lambda: event-driven via triggers | Workflows support waiting; functions are event-triggered or use separate services | Durable: timers + external events |

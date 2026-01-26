@@ -14,7 +14,7 @@ This PRD defines the business requirements for a Serverless Runtime capability t
 - synchronous and asynchronous execution
 - composability of small functions into larger operations
 - durable long-running execution
-- zero-resource sleep, supporting event wait and human-in-the-loop cases
+- zero-resource sleep, supporting wait for events and timers, and human-in-the-loop cases
 - high-scalability and compatability with event-sourcing
 - address native module functions, app, tenant and user defined functions in a common calling mechanism
 - hot (re)loading native modules for development or worker-process cases
@@ -40,6 +40,7 @@ This PRD defines the business requirements for a Serverless Runtime capability t
 - Application, tenant and user-scoped registries for functions/workflows.
 - Synchronous execution for API composition, presentation or simple APIs.
 - Long-running asynchronous execution (including multi-day executions).
+- Streaming inputs and outputs for long-running executions.
 - Host-Worker mechanism with os-level isolation of secrets and resource access from untrusted code.
 - Governance controls via resource limits and policies.
 - Multiple trigger modes (schedule, API-triggered, event-triggered).
@@ -186,6 +187,7 @@ The system MUST ensure that the execution security context is available througho
 The system MUST support secure handling of secrets and other sensitive values used by workflows/functions, ensuring that:
 - secrets are not inadvertently exposed via logs, execution history, or debugging views
 - access to secrets is restricted to authorized actors and permitted executions
+- in host-worker mode, secrets are only held in memory in the host process and not exposed to the worker process
 
 ### BR-027 (P0): Workflow/function state consistency
 The system MUST ensure that workflow/function state remains consistent during concurrent operations and system failures, with no partial updates or corrupted states.
@@ -222,9 +224,6 @@ The system MUST maintain a complete audit trail for:
 - workflow/function definition creation, modification, enable/disable, and deletion
 - execution lifecycle events (started, suspended, resumed, failed, compensated, canceled, completed)
 Audit records MUST identify the tenant, actor (system/API client/user), and correlation identifier.
-
-### BR-036 (P0): Static Traits for Dynamic Functions
-The system MUST provide application developers a mechanism to define a reusable function interface that can be bound to a dynamic function at runtime.
 
 ### P1 Requirements (Important)
 
@@ -362,11 +361,11 @@ The system SHOULD support common idempotency patterns, including idempotency key
 ### BR-135 (P1): Tenant-segmented operational metrics
 The system MUST provide operational metrics for workflow/function execution, including volume, latency, error rates, and queue/backlog indicators, and support segmentation by tenant.
 
-### BR-136 (P1): Host-Worker mode
-The system MUST provide process or OS-level isolation for worker processes, with the ability to require the worker process to use the host to interact with protected resources such as network or disk.  The host process MUST segregate secrets from the workers, which MUST NOT receive secrets.
-
-### BR-137 (P1): Hot module (re)loading
+### BR-136 (P1): Hot module (re)loading
 The system MUST provide a mechanism to load native modules at runtime, and use those modules via the common calling mechanism.
+
+### BR-137 (P1): Static Traits for Dynamic Functions
+The system MUST provide application developers a mechanism to define a reusable function interface that can be bound to a dynamic function at runtime.
 
 ### P2 Requirements (Nice-to-have)
 
@@ -393,14 +392,17 @@ The system SHOULD provide stronger isolation boundaries for workflow/function ex
 
 The P2 version may use process-level isolation with strict resource limits.
 
-### BR-207 (P2): Performance SLOs for execution and visibility
+### BR-207 (P2): Host-Worker mode
+The system SHOULD provide process or OS-level isolation for worker processes, with the ability to require the worker process to use the host to interact with protected resources such as network or disk.  The host process MUST segregate secrets from the workers, which MUST NOT receive secrets.
+
+### BR-208 (P2): Performance SLOs for execution and visibility
 Under normal load, the system SHOULD meet performance targets for:
 - workflow start latency p95 ≤ 100 ms from start request to first step scheduling
 - step dispatch latency p95 ≤ 50 ms from step scheduled to execution start
 - monitoring query latency p95 ≤ 200 ms for execution state/history queries
 - runtime overhead ≤ 10 ms per step (excluding business logic)
 
-### BR-208 (P2): Scalability targets
+### BR-209 (P2): Scalability targets
 The system SHOULD support scale targets including:
 - ≥ 10,000 concurrent executions per region under normal load
 - sustained workflow starts ≥ 1,000/sec per region under normal load
