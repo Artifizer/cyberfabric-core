@@ -139,9 +139,6 @@ Helpful environment variables:
 export RUST_LOG=debug
 
 # Show backtraces on panic
-export RUST_BACKTRACE=1
-
-# Show full backtrace details
 export RUST_BACKTRACE=full
 ```
 

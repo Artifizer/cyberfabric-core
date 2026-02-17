@@ -5,7 +5,8 @@ use clap::{Parser, Subcommand};
 use mimalloc::MiMalloc;
 use modkit::bootstrap::{
     AppConfig, dump_effective_modules_config_json, dump_effective_modules_config_yaml,
-    host::init_logging_unified, list_module_names, run_migrate, run_server,
+    host::init_logging_unified, host::init_panic_tracing, list_module_names, run_migrate,
+    run_server,
 };
 
 use std::path::PathBuf;
@@ -17,7 +18,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Parser)]
 #[command(name = "hyperspot-server")]
 #[command(about = "HyperSpot Server - modular platform for AI services")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Path to configuration file
@@ -94,6 +95,9 @@ async fn main() -> Result<()> {
     // Initialize logging + otel in one Registry
     init_logging_unified(&config.logging, &config.server.home_dir, otel_layer);
 
+    // Register custom panic hook to reroute panic backtrace into tracing.
+    init_panic_tracing();
+
     // One-time connectivity probe
     #[cfg(feature = "otel")]
     if let Some(tc) = modkit_tracing_config.as_ref()
@@ -107,7 +111,11 @@ async fn main() -> Result<()> {
         tracing::info!("startup span alive - traces should be visible in Jaeger");
     });
 
-    tracing::info!("HyperSpot Server starting");
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        rust_version = env!("CARGO_PKG_RUST_VERSION"),
+        "HyperSpot Server starting",
+    );
 
     // Print config and exit if requested
     if cli.print_config {
