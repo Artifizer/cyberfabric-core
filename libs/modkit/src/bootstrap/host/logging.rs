@@ -379,6 +379,9 @@ fn stderr_supports_ansi() -> bool {
 
 // ================= registry & layers =================
 
+// de1301_no_print_macros: eprintln! is intentional here — if the tracing subscriber
+// fails to initialize we cannot use tracing itself to report the failure.
+#[allow(unknown_lints, de1301_no_print_macros)]
 fn install_subscriber(
     console_targets: &tracing_subscriber::filter::Targets,
     file_targets: &tracing_subscriber::filter::Targets,
@@ -464,9 +467,13 @@ fn install_subscriber(
             .with(file_layer_opt)
     };
 
-    _ = subscriber.try_init();
+    if let Err(e) = subscriber.try_init() {
+        eprintln!("tracing subscriber init failed: {e}");
+    }
 }
 
+// de1301_no_print_macros: same rationale as install_subscriber above.
+#[allow(unknown_lints, de1301_no_print_macros)]
 fn init_minimal(
     #[cfg_attr(not(feature = "otel"), allow(unused_variables))] otel: Option<OtelLayer>,
 ) {
@@ -492,7 +499,9 @@ fn init_minimal(
         base.with(env).with(fmt_layer)
     };
 
-    _ = subscriber.try_init();
+    if let Err(e) = subscriber.try_init() {
+        eprintln!("tracing subscriber init failed (minimal): {e}");
+    }
 }
 
 #[cfg(test)]
