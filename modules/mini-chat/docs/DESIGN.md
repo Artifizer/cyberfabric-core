@@ -2486,6 +2486,17 @@ P1 enforces **at most one running turn per chat**. When a new `POST /messages:st
 
 Enforcement: the domain service checks for an existing `running` turn in `chat_turns` before inserting a new row. The `(chat_id, request_id)` unique constraint prevents duplicate inserts; the single-running-turn check prevents concurrent generations within the same chat.
 
+##### 409 Recovery and UX Invariant (P1)
+
+If a new stream request is received while another turn is in `state='running'`, the server MUST return HTTP 409. The client recovery path MUST be:
+
+1. Call the Turn Status endpoint (`GET /v1/chats/{chat_id}/turns/{request_id}`).
+2. If `state == done` → replay the completed response.
+3. If `state == error` or `cancelled` → allow a new request with a new `request_id`.
+4. If `state == running` → UI SHOULD display "still generating" and MUST NOT auto-retry.
+
+Orphan watchdog timeout MUST be bounded to prevent indefinite user-visible lock states. Turns stuck in `running` beyond the configured orphan timeout are transitioned to `failed` by the background watchdog (see orphan turn handling), ensuring the user is never permanently blocked.
+
 #### Non-Goals (P1)
 
 The following are explicitly out of scope for P1 crash recovery:

@@ -171,6 +171,8 @@ The system MUST deliver AI responses as a real-time SSE stream. The user sends a
 
 The request body MAY include a client-generated `request_id` used as an idempotency key, MAY include `attachment_ids` for image-bearing turns, and MAY include `web_search` to explicitly enable web search for the turn (see `cpt-cf-mini-chat-fr-web-search`). P1 enforces **at most one running turn per chat**: if any turn in the chat is currently `running`, the system MUST reject the new request with `409 Conflict`, regardless of the `request_id` value. Additionally, if a `chat_turns` record with `state=running` exists for the same `(chat_id, request_id)`, the system MUST reject with `409 Conflict`. If a completed generation exists for the same `(chat_id, request_id)`, the system MUST replay the completed assistant response rather than starting a new provider request. Replay MUST be side-effect-free: no new quota reserve, no quota settlement, no billing/outbox event emission.
 
+Clients must not auto-retry with the same `request_id` after disconnect; recovery is via the Turn Status API (`GET /v1/chats/{chat_id}/turns/{request_id}`). A new `request_id` MUST be generated for every new user-initiated retry.
+
 **Rationale**: Streaming provides perceived low latency and matches user expectations from consumer AI chat products.
 **Actors**: `cpt-cf-mini-chat-actor-chat-user`
 
