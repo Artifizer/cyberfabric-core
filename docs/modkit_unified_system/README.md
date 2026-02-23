@@ -14,7 +14,7 @@ This folder contains the ModKit developer documentation, split by topic for focu
 | Adding a new module | `02_module_layout_and_sdk_pattern.md` | `guidelines/NEW_MODULE.md` |
 | DB/persistence, SecureConn | `06_secure_orm_db_access.md` | |
 | REST endpoint wiring, OperationBuilder | `04_rest_operation_builder.md` | |
-| OData, $select, pagination, filtering | `07_odata_pagination_select_filter.md` | `docs/ODATA_SELECT.md`, `docs/ODATA_MACRO_MIGRATION.md` |
+| OData, $select, pagination, filtering | `07_odata_pagination_select_filter.md` | |
 | ClientHub, inter-module clients | `03_clienthub_and_plugins.md` | |
 | Plugins, scoped clients, GTS | `03_clienthub_and_plugins.md` | `docs/MODKIT_PLUGINS.md` |
 | Errors, RFC-9457 Problem | `05_errors_rfc9457.md` | |

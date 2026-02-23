@@ -3407,7 +3407,7 @@ Structured JSON logs sent to stdout, ingested by centralized logging system (e.g
 #### [ ] F-P3-014: Full OData Query Support on List Endpoints
 
 - Implement `$filter`, `$select`, `$orderby`, `$top`, `$skip` for upstream/route/plugin list endpoints using ModKit OData helpers.
-- Implement field projection via `apply_select` / `page_to_projected_json` (docs/ODATA_SELECT.md), including dot-notation for nested JSON fields where supported.
+- Implement field projection via `apply_select` / `page_to_projected_json` (docs/modkit_unified_system/07_odata_pagination_select_filter.md), including dot-notation for nested JSON fields where supported.
 - Enforce safe filter allowlists (no arbitrary SQL); validate field names and operations; return validation Problems on invalid queries.
 - Add scenario coverage: management list query behaviors (extend `scenarios/` as needed).
 

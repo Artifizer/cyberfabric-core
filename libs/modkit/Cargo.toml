@@ -129,3 +129,4 @@ httpmock = { workspace = true }
 tempfile = { workspace = true }
 temp-env = { workspace = true }
 modkit-db = { workspace = true, features = ["sqlite"] }
+tracing-subscriber = { workspace = true }

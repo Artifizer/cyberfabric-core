@@ -28,7 +28,7 @@ Common and stateless logic that can be reusable across modules should be impleme
 | **Add SDK traits/models/errors** | Step 4 (SDK crate) | `docs/modkit_unified_system/02_module_layout_and_sdk_pattern.md` |
 | **Add DB entities/repositories** | Step 5 (Domain layer), Step 6 (Infra storage) | `docs/modkit_unified_system/06_secure_orm_db_access.md` |
 | **Add REST endpoints** | Step 7 (REST API layer) | `docs/modkit_unified_system/04_rest_operation_builder.md` |
-| **Add OData $filter/$select** | Step 7 (REST API layer, OData subsection) | `docs/ODATA_SELECT.md`, `docs/modkit_unified_system/07_odata_pagination_select_filter.md` |
+| **Add OData $filter/$select** | Step 7 (REST API layer, OData subsection) | `docs/modkit_unified_system/07_odata_pagination_select_filter.md` |
 | **Add errors/Problem mapping** | Step 3 (Errors management) | `docs/modkit_unified_system/05_errors_rfc9457.md` |
 | **Add ClientHub inter-module calls** | Step 4 (SDK crate), Step 5 (Domain layer) | `docs/modkit_unified_system/03_clienthub_and_plugins.md` |
 | **Add background tasks/lifecycle** | Step 5 (Domain layer, events) | `docs/modkit_unified_system/08_lifecycle_stateful_tasks.md` |

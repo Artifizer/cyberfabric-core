@@ -14,4 +14,4 @@ Open additional docs only when relevant:
 
 - If the task involves persistence/DB access (SeaORM entities, migrations, repositories, tenant scoping/security context), open `@/docs/modkit_unified_system/06_secure_orm_db_access.md`. Never use raw SQL or SeaORM without prior reading of this document.
 
-- If the task involves OData `$select` field projection (or implementing endpoints that support `$select`), open `@/docs/ODATA_SELECT.md`.
+- If the task involves OData `$select` field projection (or implementing endpoints that support `$select`), open `@/docs/modkit_unified_system/07_odata_pagination_select_filter.md`.

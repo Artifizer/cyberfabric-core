@@ -56,7 +56,7 @@ use super::config::{
     AppConfig, CliArgs, LoggingConfig, MODKIT_MODULE_CONFIG_ENV, RenderedDbConfig,
     RenderedModuleConfig,
 };
-use crate::bootstrap::host::init_logging_unified;
+use crate::bootstrap::host::{init_logging_unified, init_panic_tracing};
 use crate::runtime::{
     ClientRegistration, DbOptions, MODKIT_DIRECTORY_ENDPOINT_ENV, RunOptions, ShutdownOptions, run,
     shutdown,
@@ -472,6 +472,9 @@ pub async fn run_oop_with_options(opts: OopRunOptions) -> Result<()> {
 
     // Initialize logging with MERGED config (master base + local override)
     init_logging_unified(&merged_logging, &config.server.home_dir, otel_layer);
+
+    // Register custom panic hook to reroute panic backtrace into tracing.
+    init_panic_tracing();
 
     // Now we can log - report what we received from master
     if let Some(ref rc) = rendered_config {
