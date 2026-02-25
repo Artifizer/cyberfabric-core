@@ -200,10 +200,20 @@ class MockUpstreamServer:
                 method, path, headers, body = await _read_request(reader)
                 await _handle(method, path, headers, body, writer)
                 await writer.drain()
+            except (asyncio.CancelledError, GeneratorExit):
+                raise
             except Exception:
                 pass
             finally:
-                writer.close()
+                try:
+                    writer.close()
+                except RuntimeError:
+                    # Event loop may already be closing/shutdown.
+                    return
+                try:
+                    await writer.wait_closed()
+                except (ConnectionError, RuntimeError):
+                    pass
 
         self._server = await asyncio.start_server(_client, self.host, self.port)
 
