@@ -4,6 +4,7 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use credstore_sdk::{CredStoreClientV1, CredStorePluginSpecV1};
+use modkit::contracts::SystemCapability;
 use modkit::{Module, ModuleCtx};
 use tracing::info;
 use types_registry_sdk::{RegisterResult, TypesRegistryClient};
@@ -17,11 +18,11 @@ use crate::domain::{CredStoreLocalClient, Service};
 /// 1. Registers the `CredStorePluginSpecV1` schema in types-registry
 /// 2. Discovers plugin instances via types-registry (lazy, first-use)
 /// 3. Routes secret operations through the selected plugin
-/// 4. Implements hierarchical tenant secret resolution via tenant-resolver
-/// 5. Registers `Arc<dyn CredStoreClientV1>` in `ClientHub` for consumers
+/// 4. Registers `Arc<dyn CredStoreClientV1>` in `ClientHub` for consumers
 #[modkit::module(
     name = "credstore",
-    deps = ["types-registry"]
+    deps = ["types-registry"],
+    capabilities = [system]
 )]
 pub struct CredStoreModule {
     service: OnceLock<Arc<Service>>,
@@ -70,3 +71,6 @@ impl Module for CredStoreModule {
         Ok(())
     }
 }
+
+#[async_trait]
+impl SystemCapability for CredStoreModule {}

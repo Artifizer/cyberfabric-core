@@ -50,6 +50,9 @@ impl Module for StaticCredStorePlugin {
         let instance_id =
             CredStorePluginSpecV1::gts_make_instance_id("x.core._.static_credstore.v1");
 
+        // Create service from config (validate early, before registration)
+        let service = Arc::new(Service::from_config(&cfg)?);
+
         // Register plugin instance in types-registry
         let registry = ctx.client_hub().get::<dyn TypesRegistryClient>()?;
         let instance = BaseModkitPluginV1::<CredStorePluginSpecV1> {
@@ -63,8 +66,7 @@ impl Module for StaticCredStorePlugin {
         let results = registry.register(vec![instance_json]).await?;
         RegisterResult::ensure_all_ok(&results)?;
 
-        // Create service from config
-        let service = Arc::new(Service::from_config(&cfg)?);
+        // All fallible steps done — commit service to shared state
         self.service
             .set(service.clone())
             .map_err(|_| anyhow::anyhow!("{} module already initialized", Self::MODULE_NAME))?;
@@ -72,10 +74,7 @@ impl Module for StaticCredStorePlugin {
         // Register scoped client in ClientHub
         let api: Arc<dyn CredStorePluginClientV1> = service;
         ctx.client_hub()
-            .register_scoped::<dyn CredStorePluginClientV1>(
-                ClientScope::gts_id(&instance_id),
-                api,
-            );
+            .register_scoped::<dyn CredStorePluginClientV1>(ClientScope::gts_id(&instance_id), api);
 
         info!(instance_id = %instance_id, "{} module initialized successfully", Self::MODULE_NAME);
         Ok(())

@@ -28,7 +28,7 @@ impl Default for StaticCredStorePluginConfig {
 }
 
 /// A single secret entry in the plugin configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecretConfig {
     /// Tenant that owns this secret.
@@ -46,6 +46,18 @@ pub struct SecretConfig {
     /// Sharing mode for this secret.
     #[serde(default)]
     pub sharing: SharingMode,
+}
+
+impl core::fmt::Debug for SecretConfig {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SecretConfig")
+            .field("tenant_id", &self.tenant_id)
+            .field("owner_id", &self.owner_id)
+            .field("key", &self.key)
+            .field("value", &"<redacted>")
+            .field("sharing", &self.sharing)
+            .finish()
+    }
 }
 
 #[cfg(test)]

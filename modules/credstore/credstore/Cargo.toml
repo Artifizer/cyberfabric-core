@@ -19,7 +19,6 @@ workspace = true
 
 [dependencies]
 credstore-sdk = { workspace = true }
-tenant-resolver-sdk = { workspace = true }
 types-registry-sdk = { workspace = true }
 
 anyhow = { workspace = true }

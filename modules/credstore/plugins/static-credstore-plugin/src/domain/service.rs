@@ -155,7 +155,13 @@ mod tests {
             sharing: SharingMode::Tenant,
         };
         let cfg = StaticCredStorePluginConfig {
-            secrets: vec![secret.clone(), SecretConfig { value: "sk-second".to_owned(), ..secret }],
+            secrets: vec![
+                secret.clone(),
+                SecretConfig {
+                    value: "sk-second".to_owned(),
+                    ..secret
+                },
+            ],
             ..StaticCredStorePluginConfig::default()
         };
 
@@ -164,8 +170,14 @@ mod tests {
             Err(e) => {
                 let msg = e.to_string();
                 assert!(msg.contains("duplicate"), "expected 'duplicate' in: {msg}");
-                assert!(msg.contains("openai_api_key"), "expected key name in: {msg}");
-                assert!(msg.contains(&tenant_a().to_string()), "expected tenant id in: {msg}");
+                assert!(
+                    msg.contains("openai_api_key"),
+                    "expected key name in: {msg}"
+                );
+                assert!(
+                    msg.contains(&tenant_a().to_string()),
+                    "expected tenant id in: {msg}"
+                );
             }
         }
     }

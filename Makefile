@@ -428,7 +428,7 @@ example:
 
 oop-example:
 	cargo build -p calculator --features oop_module
-	cargo run --bin hyperspot-server --features oop-example,users-info-example,static-authn,static-authz -- --config config/quickstart.yaml run
+	cargo run --bin hyperspot-server --features oop-example,users-info-example,static-authn,static-authz,static-tenants,static-credstore -- --config config/quickstart.yaml run
 
 # Run all quality checks
 check: .setup-stamp fmt cypilot-validate clippy lychee security dylint-test dylint gts-docs test
