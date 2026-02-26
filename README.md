@@ -272,18 +272,7 @@ make kani   # optional deep safety verification (Kani verifier)
 
 ### E2E Tests
 
-E2E tests require Python dependencies and pytest:
-
-```bash
-pip install -r testing/requirements.txt
-```
-
-```bash
-make e2e-local  # Run e2e tests locally against a running server
-make e2e-docker # Run e2e tests in a Docker container
-make coverage-e2e # Run e2e tests with code coverage
-make coverage # Run both unit and e2e tests with code coverage
-```
+See [E2E Tests](testing/e2e/README.md) for details.
 
 ## Contributing
 

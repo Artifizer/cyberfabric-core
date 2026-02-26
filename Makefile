@@ -4,7 +4,7 @@ OPENAPI_URL ?= http://127.0.0.1:8087/openapi.json
 OPENAPI_OUT ?= docs/api/api.json
 
 # E2E Docker args
-E2E_ARGS ?= --features users-info-example
+E2E_ARGS ?= --features users-info-example,static-tenants,static-authz
 
 # -------- Utility macros --------
 
@@ -314,22 +314,26 @@ test-users-info-pg:
 
 # -------- E2E tests --------
 
-.PHONY: e2e e2e-local e2e-docker e2e-smoke
+.PHONY: e2e e2e-local e2e-local-smoke e2e-docker e2e-docker-smoke
 
 # Run E2E tests in Docker (default)
 e2e: e2e-docker
 
+## Run E2E tests in Docker environment
+e2e-docker:
+	python3 scripts/ci.py e2e-docker $(E2E_ARGS)
+
 ## Run E2E smoke tests in Docker (only tests marked @pytest.mark.smoke)
-e2e-smoke:
-	python3 scripts/ci.py e2e --docker $(E2E_ARGS) -- -m smoke
+e2e-docker-smoke:
+	python3 scripts/ci.py e2e-docker $(E2E_ARGS) -- -m smoke
 
 # Run E2E tests locally
 e2e-local:
-	python3 scripts/ci.py e2e
+	python3 scripts/ci.py e2e-local
 
-## Run E2E tests in Docker environment
-e2e-docker:
-	python3 scripts/ci.py e2e --docker $(E2E_ARGS)
+## Run E2E smoke tests locally (only tests marked @pytest.mark.smoke)
+e2e-local-smoke:
+	python3 scripts/ci.py e2e-local --smoke
 
 # -------- Code coverage --------
 

@@ -357,6 +357,20 @@ def cmd_e2e(args):
         build_cmd.append(".")
         run_cmd(build_cmd)
 
+        # Rebuild only the mock service so Python mock server changes are picked up
+        # without overwriting the prebuilt API image (which was built with features).
+        step("Rebuilding docker-compose mock service")
+        run_cmd(
+            [
+                "docker",
+                "compose",
+                "-f",
+                "testing/docker/docker-compose.yml",
+                "build",
+                "mock",
+            ]
+        )
+
         # Start environment
         step("Starting E2E docker-compose environment")
         run_cmd(
@@ -453,6 +467,7 @@ def cmd_e2e(args):
     # Set E2E_DOCKER_MODE flag for the tests to know which mode they're in
     if args.docker:
         env["E2E_DOCKER_MODE"] = "1"
+        env.setdefault("E2E_MOCK_UPSTREAM_URL", "http://mock:8080")
 
     pytest_cmd = [PYTHON, "-m", "pytest", "testing/e2e", "-vv"]
     if args.smoke:
@@ -498,6 +513,16 @@ def cmd_e2e(args):
         print("E2E tests failed")
 
     sys.exit(exit_code)
+
+
+def cmd_e2e_local(args):
+    args.docker = False
+    cmd_e2e(args)
+
+
+def cmd_e2e_docker(args):
+    args.docker = True
+    cmd_e2e(args)
 
 
 def cmd_dylint(_args):
@@ -808,29 +833,46 @@ def build_parser():
     p_qs = subparsers.add_parser("quickstart", help="Start server in quickstart mode")
     p_qs.set_defaults(func=cmd_quickstart)
 
-    # e2e
-    p_e2e = subparsers.add_parser("e2e", help="Run end-to-end tests")
-    p_e2e.add_argument(
-        "--docker",
-        action="store_true",
-        help="Run tests in Docker environment instead of local server",
-    )
-    p_e2e.add_argument(
+    # e2e-local
+    p_e2e_local = subparsers.add_parser("e2e-local", help="Run end-to-end tests in local mode")
+    p_e2e_local.add_argument(
         "--features",
         default="users-info-example",
-        help="Cargo features to enable for Docker build (default: users-info-example)",
+        help="Ignored in local mode (kept for CLI parity)",
     )
-    p_e2e.add_argument(
+    p_e2e_local.add_argument(
         "--smoke",
         action="store_true",
         help="Run only tests marked with @pytest.mark.smoke",
     )
-    p_e2e.add_argument(
+    p_e2e_local.add_argument(
         "pytest_args",
         nargs=argparse.REMAINDER,
         help="Extra arguments passed to pytest (use -- to separate)",
     )
-    p_e2e.set_defaults(func=cmd_e2e)
+    p_e2e_local.set_defaults(func=cmd_e2e_local)
+
+    # e2e-docker
+    p_e2e_docker = subparsers.add_parser("e2e-docker", help="Run end-to-end tests in Docker mode")
+    p_e2e_docker.add_argument(
+        "--features",
+        default="users-info-example,static-tenants,static-authz",
+        help=(
+            "Cargo features to enable for Docker build "
+            "(default: users-info-example,static-tenants,static-authz)"
+        ),
+    )
+    p_e2e_docker.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run only tests marked with @pytest.mark.smoke",
+    )
+    p_e2e_docker.add_argument(
+        "pytest_args",
+        nargs=argparse.REMAINDER,
+        help="Extra arguments passed to pytest (use -- to separate)",
+    )
+    p_e2e_docker.set_defaults(func=cmd_e2e_docker)
 
     # dylint
     p_dylint = subparsers.add_parser("dylint", help="Build and run dylint lints")
