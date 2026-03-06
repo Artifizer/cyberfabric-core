@@ -65,11 +65,32 @@ pub struct Message {
     pub request_id: Uuid,
     pub role: String,
     pub content: String,
-    pub attachment_ids: Vec<Uuid>,
+    pub attachments: Vec<AttachmentSummary>,
     pub model: Option<String>,
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
     pub created_at: OffsetDateTime,
+}
+
+/// Lightweight attachment metadata embedded in Message objects.
+#[domain_model]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentSummary {
+    pub attachment_id: Uuid,
+    pub kind: String,
+    pub filename: String,
+    pub status: String,
+    pub img_thumbnail: Option<ImgThumbnail>,
+}
+
+/// Server-generated preview thumbnail for an image attachment.
+#[domain_model]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImgThumbnail {
+    pub content_type: String,
+    pub width: i32,
+    pub height: i32,
+    pub data_base64: String,
 }
 
 // ── Reaction ──

@@ -67,6 +67,13 @@ impl<MR: MessageRepository, CR: ChatRepository> MessageService<MR, CR> {
             .list_by_chat(&conn, &msg_scope, chat_id, query)
             .await?;
 
+        // Batch-fetch attachment summaries for all returned messages (single query).
+        let msg_ids: Vec<Uuid> = page.items.iter().map(|m| m.id).collect();
+        let mut att_map = self
+            .message_repo
+            .batch_attachment_summaries(&conn, &msg_scope, chat_id, &msg_ids)
+            .await?;
+
         let items: Vec<Message> = page
             .items
             .into_iter()
@@ -75,6 +82,7 @@ impl<MR: MessageRepository, CR: ChatRepository> MessageService<MR, CR> {
                 let request_id = m.request_id.ok_or_else(|| {
                     DomainError::internal("list_by_chat returned message with null request_id")
                 })?;
+                let attachments = att_map.remove(&m.id).unwrap_or_default();
                 Ok(Message {
                     id: m.id,
                     request_id,
@@ -84,7 +92,7 @@ impl<MR: MessageRepository, CR: ChatRepository> MessageService<MR, CR> {
                         MessageRole::System => "system".to_owned(),
                     },
                     content: m.content,
-                    attachment_ids: Vec::new(), // TODO: fetch attachment IDs and metadata in the future
+                    attachments,
                     model: m.model,
                     input_tokens: if m.input_tokens == 0 {
                         None

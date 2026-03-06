@@ -6,7 +6,7 @@
 //! Stream event types live in `domain::stream_events`; SSE wire conversion
 //! and ordering enforcement live in `api::rest::sse`.
 
-use crate::domain::models::ChatDetail;
+use crate::domain::models::{AttachmentSummary, ChatDetail, ImgThumbnail};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -74,7 +74,7 @@ pub struct MessageDto {
     pub request_id: Uuid,
     pub role: String,
     pub content: String,
-    pub attachment_ids: Vec<Uuid>,
+    pub attachments: Vec<AttachmentSummaryDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,11 +92,60 @@ impl From<crate::domain::models::Message> for MessageDto {
             request_id: m.request_id,
             role: m.role,
             content: m.content,
-            attachment_ids: m.attachment_ids,
+            attachments: m
+                .attachments
+                .into_iter()
+                .map(AttachmentSummaryDto::from)
+                .collect(),
             model: m.model,
             input_tokens: m.input_tokens,
             output_tokens: m.output_tokens,
             created_at: m.created_at,
+        }
+    }
+}
+
+/// Lightweight attachment metadata embedded in Message responses.
+#[derive(Debug, Clone)]
+#[modkit_macros::api_dto(response)]
+pub struct AttachmentSummaryDto {
+    pub attachment_id: Uuid,
+    pub kind: String,
+    pub filename: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub img_thumbnail: Option<ImgThumbnailDto>,
+}
+
+impl From<AttachmentSummary> for AttachmentSummaryDto {
+    fn from(a: AttachmentSummary) -> Self {
+        Self {
+            attachment_id: a.attachment_id,
+            kind: a.kind,
+            filename: a.filename,
+            status: a.status,
+            img_thumbnail: a.img_thumbnail.map(ImgThumbnailDto::from),
+        }
+    }
+}
+
+/// Server-generated preview thumbnail for an image attachment.
+#[derive(Debug, Clone)]
+#[modkit_macros::api_dto(response)]
+pub struct ImgThumbnailDto {
+    pub content_type: String,
+    pub width: i32,
+    pub height: i32,
+    pub data_base64: String,
+}
+
+impl From<ImgThumbnail> for ImgThumbnailDto {
+    fn from(t: ImgThumbnail) -> Self {
+        Self {
+            content_type: t.content_type,
+            width: t.width,
+            height: t.height,
+            data_base64: t.data_base64,
         }
     }
 }

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
+use modkit_db::secure::secure_insert;
 use modkit_odata::ODataQuery;
 use modkit_security::AccessScope;
+use sea_orm::Set;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::domain::error::DomainError;
@@ -14,6 +17,8 @@ use crate::domain::service::test_helpers::{
     inmem_db, mock_db_provider, mock_enforcer, mock_model_resolver, mock_thread_summary_repo,
     test_security_ctx,
 };
+use crate::infra::db::entity::attachment::{ActiveModel as AttAm, Entity as AttEntity};
+use crate::infra::db::entity::message_attachment::{ActiveModel as MaAm, Entity as MaEntity};
 use crate::infra::db::repo::chat_repo::ChatRepository as OrmChatRepository;
 use crate::infra::db::repo::message_repo::MessageRepository as OrmMessageRepository;
 
@@ -483,5 +488,351 @@ async fn list_messages_pagination_backward_cursor() {
     assert_eq!(
         back_ids, page1_ids,
         "Backward navigation must return to page 1 items"
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Attachment integration tests
+// ════════════════════════════════════════════════════════════════════
+
+/// Insert an attachment row via `secure_insert`. Returns the attachment ID.
+async fn insert_attachment(
+    db_provider: &Arc<crate::domain::service::DbProvider>,
+    tenant_id: Uuid,
+    chat_id: Uuid,
+    kind: &str,
+    filename: &str,
+    status: &str,
+    img_thumbnail: Option<(Vec<u8>, i32, i32)>,
+) -> Uuid {
+    let now = OffsetDateTime::now_utc();
+    let att_id = Uuid::now_v7();
+    let (thumb_bytes, thumb_w, thumb_h) = match img_thumbnail {
+        Some((bytes, w, h)) => (Some(bytes), Some(w), Some(h)),
+        None => (None, None, None),
+    };
+    let am = AttAm {
+        id: Set(att_id),
+        tenant_id: Set(tenant_id),
+        chat_id: Set(chat_id),
+        uploaded_by_user_id: Set(Uuid::new_v4()),
+        filename: Set(filename.to_owned()),
+        content_type: Set("application/octet-stream".to_owned()),
+        size_bytes: Set(1024),
+        storage_backend: Set("azure".to_owned()),
+        provider_file_id: Set(None),
+        status: Set(status.to_owned()),
+        attachment_kind: Set(kind.to_owned()),
+        doc_summary: Set(None),
+        img_thumbnail: Set(thumb_bytes),
+        img_thumbnail_width: Set(thumb_w),
+        img_thumbnail_height: Set(thumb_h),
+        summary_model: Set(None),
+        summary_updated_at: Set(None),
+        cleanup_status: Set(None),
+        cleanup_attempts: Set(0),
+        last_cleanup_error: Set(None),
+        cleanup_updated_at: Set(None),
+        created_at: Set(now),
+        deleted_at: Set(None),
+    };
+    let conn = db_provider.conn().expect("conn");
+    let scope = AccessScope::allow_all();
+    secure_insert::<AttEntity>(am, &scope, &conn)
+        .await
+        .expect("insert attachment");
+    att_id
+}
+
+/// Link a message to an attachment via `message_attachments`.
+async fn link_message_attachment(
+    db_provider: &Arc<crate::domain::service::DbProvider>,
+    tenant_id: Uuid,
+    chat_id: Uuid,
+    message_id: Uuid,
+    attachment_id: Uuid,
+) {
+    let now = OffsetDateTime::now_utc();
+    let am = MaAm {
+        tenant_id: Set(tenant_id),
+        chat_id: Set(chat_id),
+        message_id: Set(message_id),
+        attachment_id: Set(attachment_id),
+        created_at: Set(now),
+    };
+    let conn = db_provider.conn().expect("conn");
+    let scope = AccessScope::allow_all();
+    secure_insert::<MaEntity>(am, &scope, &conn)
+        .await
+        .expect("link message attachment");
+}
+
+#[tokio::test]
+async fn list_messages_returns_attachments() {
+    let db = inmem_db().await;
+    let db_provider = mock_db_provider(db);
+    let chat_repo = Arc::new(OrmChatRepository::new(limit_cfg()));
+
+    let chat_svc = build_chat_service(Arc::clone(&db_provider), Arc::clone(&chat_repo));
+    let msg_svc = build_message_service(Arc::clone(&db_provider), Arc::clone(&chat_repo));
+
+    let tenant_id = Uuid::new_v4();
+    let ctx = test_security_ctx(tenant_id);
+
+    let chat = chat_svc
+        .create_chat(
+            &ctx,
+            NewChat {
+                model: None,
+                title: Some("Attachments test".to_owned()),
+                is_temporary: false,
+            },
+        )
+        .await
+        .expect("create_chat");
+
+    // Insert a user message
+    let scope = AccessScope::for_tenant(tenant_id);
+    let conn = db_provider.conn().expect("conn");
+    let message_repo = OrmMessageRepository::new(limit_cfg());
+    let request_id = Uuid::new_v4();
+    let msg_id = Uuid::now_v7();
+
+    message_repo
+        .insert_user_message(
+            &conn,
+            &scope,
+            InsertUserMessageParams {
+                id: msg_id,
+                tenant_id,
+                chat_id: chat.id,
+                request_id,
+                content: "See attached".to_owned(),
+            },
+        )
+        .await
+        .expect("insert_user_message");
+
+    // Insert two attachments and link them to the message
+    let att_a = insert_attachment(
+        &db_provider,
+        tenant_id,
+        chat.id,
+        "document",
+        "report.pdf",
+        "ready",
+        None,
+    )
+    .await;
+    let att_b = insert_attachment(
+        &db_provider,
+        tenant_id,
+        chat.id,
+        "image",
+        "photo.webp",
+        "ready",
+        Some((vec![0xFF, 0xD8], 120, 80)),
+    )
+    .await;
+    link_message_attachment(&db_provider, tenant_id, chat.id, msg_id, att_a).await;
+    link_message_attachment(&db_provider, tenant_id, chat.id, msg_id, att_b).await;
+
+    // list_messages should return the message with both attachments
+    let page = msg_svc
+        .list_messages(&ctx, chat.id, &ODataQuery::default())
+        .await
+        .expect("list_messages");
+
+    assert_eq!(page.items.len(), 1);
+    let msg = &page.items[0];
+    assert_eq!(
+        msg.attachments.len(),
+        2,
+        "message should have 2 attachments"
+    );
+
+    let att_ids: Vec<Uuid> = msg.attachments.iter().map(|a| a.attachment_id).collect();
+    assert!(att_ids.contains(&att_a), "must contain att_a");
+    assert!(att_ids.contains(&att_b), "must contain att_b");
+
+    // Verify the image attachment has a thumbnail
+    let img_att = msg
+        .attachments
+        .iter()
+        .find(|a| a.attachment_id == att_b)
+        .expect("image attachment");
+    assert_eq!(img_att.kind, "image");
+    assert_eq!(img_att.filename, "photo.webp");
+    let thumb = img_att.img_thumbnail.as_ref().expect("thumbnail present");
+    assert_eq!(thumb.width, 120);
+    assert_eq!(thumb.height, 80);
+
+    // Verify the document attachment has no thumbnail
+    let doc_att = msg
+        .attachments
+        .iter()
+        .find(|a| a.attachment_id == att_a)
+        .expect("document attachment");
+    assert_eq!(doc_att.kind, "document");
+    assert!(doc_att.img_thumbnail.is_none());
+}
+
+#[tokio::test]
+async fn list_messages_no_attachments_returns_empty_vec() {
+    let db = inmem_db().await;
+    let db_provider = mock_db_provider(db);
+    let chat_repo = Arc::new(OrmChatRepository::new(limit_cfg()));
+
+    let chat_svc = build_chat_service(Arc::clone(&db_provider), Arc::clone(&chat_repo));
+    let msg_svc = build_message_service(Arc::clone(&db_provider), Arc::clone(&chat_repo));
+
+    let tenant_id = Uuid::new_v4();
+    let ctx = test_security_ctx(tenant_id);
+
+    let chat = chat_svc
+        .create_chat(
+            &ctx,
+            NewChat {
+                model: None,
+                title: Some("No attachments".to_owned()),
+                is_temporary: false,
+            },
+        )
+        .await
+        .expect("create_chat");
+
+    let scope = AccessScope::for_tenant(tenant_id);
+    let conn = db_provider.conn().expect("conn");
+    let message_repo = OrmMessageRepository::new(limit_cfg());
+
+    message_repo
+        .insert_user_message(
+            &conn,
+            &scope,
+            InsertUserMessageParams {
+                id: Uuid::now_v7(),
+                tenant_id,
+                chat_id: chat.id,
+                request_id: Uuid::new_v4(),
+                content: "Plain message".to_owned(),
+            },
+        )
+        .await
+        .expect("insert_user_message");
+
+    let page = msg_svc
+        .list_messages(&ctx, chat.id, &ODataQuery::default())
+        .await
+        .expect("list_messages");
+
+    assert_eq!(page.items.len(), 1);
+    assert!(
+        page.items[0].attachments.is_empty(),
+        "message without links must have empty attachments"
+    );
+}
+
+#[tokio::test]
+async fn list_messages_mixed_messages_with_and_without_attachments() {
+    let db = inmem_db().await;
+    let db_provider = mock_db_provider(db);
+    let chat_repo = Arc::new(OrmChatRepository::new(limit_cfg()));
+
+    let chat_svc = build_chat_service(Arc::clone(&db_provider), Arc::clone(&chat_repo));
+    let msg_svc = build_message_service(Arc::clone(&db_provider), Arc::clone(&chat_repo));
+
+    let tenant_id = Uuid::new_v4();
+    let ctx = test_security_ctx(tenant_id);
+
+    let chat = chat_svc
+        .create_chat(
+            &ctx,
+            NewChat {
+                model: None,
+                title: Some("Mixed".to_owned()),
+                is_temporary: false,
+            },
+        )
+        .await
+        .expect("create_chat");
+
+    let scope = AccessScope::for_tenant(tenant_id);
+    let conn = db_provider.conn().expect("conn");
+    let message_repo = OrmMessageRepository::new(limit_cfg());
+    let request_id = Uuid::new_v4();
+
+    // User message with attachment
+    let user_msg_id = Uuid::now_v7();
+    message_repo
+        .insert_user_message(
+            &conn,
+            &scope,
+            InsertUserMessageParams {
+                id: user_msg_id,
+                tenant_id,
+                chat_id: chat.id,
+                request_id,
+                content: "With file".to_owned(),
+            },
+        )
+        .await
+        .expect("insert_user_message");
+
+    let att_id = insert_attachment(
+        &db_provider,
+        tenant_id,
+        chat.id,
+        "document",
+        "notes.txt",
+        "ready",
+        None,
+    )
+    .await;
+    link_message_attachment(&db_provider, tenant_id, chat.id, user_msg_id, att_id).await;
+
+    // Assistant message without attachment
+    let asst_msg_id = Uuid::now_v7();
+    message_repo
+        .insert_assistant_message(
+            &conn,
+            &scope,
+            InsertAssistantMessageParams {
+                id: asst_msg_id,
+                tenant_id,
+                chat_id: chat.id,
+                request_id,
+                content: "Got it".to_owned(),
+                input_tokens: None,
+                output_tokens: None,
+                model: None,
+                provider_response_id: None,
+            },
+        )
+        .await
+        .expect("insert_assistant_message");
+
+    let page = msg_svc
+        .list_messages(&ctx, chat.id, &ODataQuery::default())
+        .await
+        .expect("list_messages");
+
+    assert_eq!(page.items.len(), 2);
+
+    let user_msg = page
+        .items
+        .iter()
+        .find(|m| m.id == user_msg_id)
+        .expect("user msg");
+    assert_eq!(user_msg.attachments.len(), 1);
+    assert_eq!(user_msg.attachments[0].attachment_id, att_id);
+
+    let asst_msg = page
+        .items
+        .iter()
+        .find(|m| m.id == asst_msg_id)
+        .expect("asst msg");
+    assert!(
+        asst_msg.attachments.is_empty(),
+        "assistant message must have no attachments"
     );
 }

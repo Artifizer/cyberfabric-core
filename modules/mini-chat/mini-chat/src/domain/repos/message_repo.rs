@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use modkit_db::secure::DBRunner;
 use modkit_macros::domain_model;
@@ -5,6 +7,7 @@ use modkit_security::AccessScope;
 use uuid::Uuid;
 
 use crate::domain::error::DomainError;
+use crate::domain::models::AttachmentSummary;
 use crate::infra::db::entity::message::Model as MessageModel;
 
 /// Parameters for inserting a user message.
@@ -79,4 +82,14 @@ pub trait MessageRepository: Send + Sync {
         chat_id: Uuid,
         query: &modkit_odata::ODataQuery,
     ) -> Result<modkit_odata::Page<MessageModel>, DomainError>;
+
+    /// Batch-fetch attachment summaries for the given message IDs (single query).
+    /// Returns a map from `message_id` to its `AttachmentSummary` list.
+    async fn batch_attachment_summaries<C: DBRunner>(
+        &self,
+        runner: &C,
+        scope: &AccessScope,
+        chat_id: Uuid,
+        message_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<AttachmentSummary>>, DomainError>;
 }
