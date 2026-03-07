@@ -541,11 +541,13 @@ reporting ensures file operations are not degraded by usage collection availabil
 
 - [ ] `p2` - **ID**: `cpt-cf-file-storage-fr-storage-quota`
 
-The system **MUST** check with the Quota Enforcement service before accepting uploads that increase storage consumption.
-Uploads that would exceed the owner's storage quota **MUST** be rejected.
+The system **MUST** check with the Quota Enforcement service before accepting any operation that increases storage
+consumption (including uploads and version creation). Operations that would exceed the owner's storage quota **MUST** be
+rejected.
 
 **Rationale**: Without storage quotas, tenants can consume unbounded storage, increasing costs and risking resource
-exhaustion for the platform.  
+exhaustion for the platform. Quota checks must cover all storage-consuming operations, not only initial uploads, to
+prevent quota bypass through versioned overwrites.  
 **Actors**: `cpt-cf-file-storage-actor-platform-user`, `cpt-cf-file-storage-actor-cf-modules`
 
 ### 5.6 Metadata
