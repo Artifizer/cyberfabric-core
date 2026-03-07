@@ -850,9 +850,16 @@ upload request. If a subsequent upload request arrives with the same idempotency
 result of the original upload instead of creating a duplicate file. Idempotency keys **MUST** expire after a
 configurable window.
 
+Idempotency keys **MUST** be scoped to the file owner specified in the upload request — the same entity that will own
+the resulting file (`cpt-cf-file-storage-fr-file-ownership`). When the owner is a tenant, the key is unique within that
+tenant's namespace. When the owner is a user, the key is unique within that user's namespace. The same key value used by
+different owners **MUST** be treated as distinct keys. The system **MUST NOT** allow idempotency key lookups to cross
+owner boundaries — a request **MUST NOT** be able to detect whether a different owner has used a given key.
+
 **Rationale**: Upload requests can fail ambiguously — the connection drops but the upload succeeds server-side. Without
 idempotency, client retries create duplicate files. Idempotency keys enable safe retries for single-part and multipart
-uploads across unreliable networks.  
+uploads across unreliable networks. Owner-scoped key namespacing prevents cross-tenant information leaks and aligns with
+the platform's tenant boundary enforcement (`cpt-cf-file-storage-fr-tenant-boundary`).  
 **Actors**: `cpt-cf-file-storage-actor-platform-user`, `cpt-cf-file-storage-actor-cf-modules`
 
 ## 6. Non-Functional Requirements
