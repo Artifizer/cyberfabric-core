@@ -3,9 +3,8 @@ use serde::Deserialize;
 
 /// Plugin configuration.
 ///
-/// `model_catalog` MUST be provided in the config file (empty catalog fails at
-/// init). The `Default` impl exists only to satisfy the `ModuleCtx::config()`
-/// bound — it produces an empty catalog that is rejected at startup.
+/// `model_catalog` key is required during deserialization (no `#[serde(default)]`),
+/// but an empty list is valid — the plugin operates with zero models.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StaticMiniChatPolicyPluginConfig {
@@ -18,7 +17,6 @@ pub struct StaticMiniChatPolicyPluginConfig {
     pub priority: i16,
 
     /// Static model catalog entries.
-    #[serde(default)]
     pub model_catalog: Vec<ModelCatalogEntry>,
 
     /// Static kill switches (all disabled by default).
