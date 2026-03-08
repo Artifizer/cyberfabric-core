@@ -153,6 +153,10 @@ modules:
       #       prefix: ""
       #       secret_ref: "cred://azure-openai-key-tenant-b"
 
+  static-mini-chat-audit-plugin:
+    config:
+      enabled: true
+
   static-mini-chat-model-policy-plugin:
     config:
       vendor: "hyperspot"

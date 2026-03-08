@@ -1885,6 +1885,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cf-static-mini-chat-audit-plugin"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "cf-mini-chat-sdk",
+ "cf-modkit",
+ "cf-modkit-macros",
+ "cf-types-registry-sdk",
+ "inventory",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "cf-static-mini-chat-model-policy-plugin"
 version = "0.4.0"
 dependencies = [
@@ -3854,6 +3870,7 @@ dependencies = [
  "cf-static-authn-plugin",
  "cf-static-authz-plugin",
  "cf-static-credstore-plugin",
+ "cf-static-mini-chat-audit-plugin",
  "cf-static-mini-chat-model-policy-plugin",
  "cf-static-tr-plugin",
  "cf-tenant-resolver",

@@ -2,7 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use authz_resolver_sdk::AuthZResolverClient;
-use mini_chat_sdk::MiniChatModelPolicyPluginSpecV1;
+use mini_chat_sdk::{MiniChatAuditPluginSpecV1, MiniChatModelPolicyPluginSpecV1};
 use modkit::api::OpenApiRegistry;
 use modkit::{DatabaseCapability, Module, ModuleCtx, RestApiCapability};
 use oagw_sdk::ServiceGatewayClientV1;
@@ -86,22 +86,23 @@ impl Module for MiniChatModule {
             ));
         }
 
-        // Register model-policy plugin schema in types-registry
         let registry = ctx.client_hub().get::<dyn TypesRegistryClient>()?;
-        let schema_str = MiniChatModelPolicyPluginSpecV1::gts_schema_with_refs_as_string();
-        let mut schema_json: serde_json::Value = serde_json::from_str(&schema_str)?;
-        if let Some(obj) = schema_json.as_object_mut() {
-            obj.insert(
-                "additionalProperties".to_owned(),
-                serde_json::Value::Bool(false),
-            );
-        }
-        let results = registry.register(vec![schema_json]).await?;
-        RegisterResult::ensure_all_ok(&results)?;
-        info!(
-            schema_id = %MiniChatModelPolicyPluginSpecV1::gts_schema_id(),
-            "Registered model-policy plugin schema in types-registry"
-        );
+        register_plugin_schemas(
+            &*registry,
+            &[
+                (
+                    MiniChatModelPolicyPluginSpecV1::gts_schema_with_refs_as_string(),
+                    MiniChatModelPolicyPluginSpecV1::gts_schema_id(),
+                    "model-policy",
+                ),
+                (
+                    MiniChatAuditPluginSpecV1::gts_schema_with_refs_as_string(),
+                    MiniChatAuditPluginSpecV1::gts_schema_id(),
+                    "audit",
+                ),
+            ],
+        )
+        .await?;
 
         self.url_prefix
             .set(cfg.url_prefix)
@@ -194,4 +195,28 @@ impl RestApiCapability for MiniChatModule {
         info!("Mini-chat REST routes registered successfully");
         Ok(router)
     }
+}
+
+async fn register_plugin_schemas(
+    registry: &dyn TypesRegistryClient,
+    schemas: &[(String, &str, &str)],
+) -> anyhow::Result<()> {
+    let mut payload = Vec::with_capacity(schemas.len());
+    for (schema_str, schema_id, _label) in schemas {
+        let mut schema_json: serde_json::Value = serde_json::from_str(schema_str)?;
+        let obj = schema_json
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("schema {schema_id} is not a JSON object"))?;
+        obj.insert(
+            "additionalProperties".to_owned(),
+            serde_json::Value::Bool(false),
+        );
+        payload.push(schema_json);
+    }
+    let results = registry.register(payload).await?;
+    RegisterResult::ensure_all_ok(&results)?;
+    for (_schema_str, schema_id, label) in schemas {
+        info!(schema_id = %schema_id, "Registered {label} plugin schema in types-registry");
+    }
+    Ok(())
 }
