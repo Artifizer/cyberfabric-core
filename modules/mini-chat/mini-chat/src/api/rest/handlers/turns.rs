@@ -10,7 +10,7 @@ use modkit_security::SecurityContext;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{Instrument, info, warn};
 use utoipa::ToSchema;
 
 use super::messages::SseRelay;
@@ -46,6 +46,7 @@ fn map_turn_state(state: &TurnState) -> &'static str {
 }
 
 /// GET /mini-chat/v1/chats/{id}/turns/{request_id}
+#[tracing::instrument(skip(svc, ctx), fields(chat_id = %chat_id, turn_request_id = %request_id))]
 pub(crate) async fn get_turn(
     Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<AppServices>>,
@@ -65,10 +66,11 @@ pub(crate) async fn get_turn(
     let scope = scope.tenant_only();
 
     let conn = svc.db.conn().map_err(|e| {
+        tracing::error!(error = %e, "failed to acquire DB connection for get_turn");
         Problem::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Internal Error",
-            e.to_string(),
+            "An internal error occurred",
         )
     })?;
 
@@ -77,10 +79,11 @@ pub(crate) async fn get_turn(
         .find_by_chat_and_request_id(&conn, &scope, chat_id, request_id)
         .await
         .map_err(|e| {
+            tracing::error!(error = %e, "failed to fetch turn from DB");
             Problem::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal Error",
-                e.to_string(),
+                "An internal error occurred",
             )
         })?
         .ok_or_else(|| Problem::new(StatusCode::NOT_FOUND, "turn_not_found", "Turn not found"))?;
@@ -105,6 +108,7 @@ pub(crate) struct DeleteTurnResponse {
 }
 
 /// DELETE /mini-chat/v1/chats/{id}/turns/{request_id}
+#[tracing::instrument(skip(svc, ctx), fields(chat_id = %chat_id, turn_request_id = %request_id))]
 pub(crate) async fn delete_turn(
     Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<AppServices>>,
@@ -114,7 +118,7 @@ pub(crate) async fn delete_turn(
         .turns
         .delete(&ctx, chat_id, request_id)
         .await
-        .map_err(mutation_error_to_problem)?;
+        .map_err(|e| mutation_error_to_problem(&e))?;
 
     Ok(Json(DeleteTurnResponse {
         request_id: result.request_id,
@@ -127,6 +131,7 @@ pub(crate) async fn delete_turn(
 // ════════════════════════════════════════════════════════════════════════════
 
 /// POST /mini-chat/v1/chats/{id}/turns/{request_id}/retry
+#[tracing::instrument(skip(svc, ctx), fields(chat_id = %chat_id, turn_request_id = %request_id))]
 pub(crate) async fn retry_turn(
     Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<AppServices>>,
@@ -134,7 +139,7 @@ pub(crate) async fn retry_turn(
 ) -> Response {
     let mutation = match svc.turns.retry(&ctx, chat_id, request_id).await {
         Ok(m) => m,
-        Err(e) => return mutation_error_to_problem(e).into_response(),
+        Err(e) => return mutation_error_to_problem(&e).into_response(),
     };
 
     start_mutation_stream(&svc, ctx, chat_id, mutation).await
@@ -152,6 +157,7 @@ pub struct EditTurnRequest {
 impl modkit::api::api_dto::RequestApiDto for EditTurnRequest {}
 
 /// PATCH /mini-chat/v1/chats/{id}/turns/{request_id}
+#[tracing::instrument(skip(svc, ctx, body), fields(chat_id = %chat_id, turn_request_id = %request_id))]
 pub(crate) async fn edit_turn(
     Extension(ctx): Extension<SecurityContext>,
     Extension(svc): Extension<Arc<AppServices>>,
@@ -173,7 +179,7 @@ pub(crate) async fn edit_turn(
         .await
     {
         Ok(m) => m,
-        Err(e) => return mutation_error_to_problem(e).into_response(),
+        Err(e) => return mutation_error_to_problem(&e).into_response(),
     };
 
     start_mutation_stream(&svc, ctx, chat_id, mutation).await
@@ -183,6 +189,7 @@ pub(crate) async fn edit_turn(
 // Shared helpers
 // ════════════════════════════════════════════════════════════════════════════
 
+#[allow(clippy::cognitive_complexity)]
 async fn start_mutation_stream(
     svc: &AppServices,
     ctx: SecurityContext,
@@ -192,15 +199,17 @@ async fn start_mutation_stream(
     let chat = match svc.chats.get_chat(&ctx, chat_id).await {
         Ok(c) => c,
         Err(e) => {
+            warn!(error = %e, "failed to fetch chat for mutation stream");
             return Problem::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal Error",
-                e.to_string(),
+                "An internal error occurred",
             )
             .into_response();
         }
     };
 
+    let chat_model = chat.model.clone();
     let resolved = match svc
         .models
         .resolve_model(ctx.subject_id(), Some(chat.model))
@@ -208,6 +217,7 @@ async fn start_mutation_stream(
     {
         Ok(r) => r,
         Err(e) => {
+            warn!(error = %e, model = %chat_model, "model resolution failed for mutation stream");
             return Problem::new(StatusCode::BAD_REQUEST, "Bad Request", e.to_string())
                 .into_response();
         }
@@ -240,14 +250,18 @@ async fn start_mutation_stream(
         .await
     {
         Ok(handle) => handle,
-        Err(e) => return stream_error_to_response(e),
+        Err(e) => return stream_error_to_response(&e),
     };
 
-    tokio::spawn(async move {
-        if let Err(e) = provider_handle.await {
-            tracing::error!(error = ?e, "provider task panicked");
+    let monitor_span = tracing::Span::current();
+    tokio::spawn(
+        async move {
+            if let Err(e) = provider_handle.await {
+                tracing::error!(error = ?e, "provider task panicked");
+            }
         }
-    });
+        .instrument(monitor_span),
+    );
 
     let relay = SseRelay::new(rx, cancel, ping_secs);
     Sse::new(relay)
@@ -256,7 +270,10 @@ async fn start_mutation_stream(
 }
 
 /// Map `MutationError` to HTTP problem response.
-fn mutation_error_to_problem(err: MutationError) -> Problem {
+///
+/// Caller is expected to be within an instrumented span that carries
+/// `chat_id` and `turn_request_id` fields.
+fn mutation_error_to_problem(err: &MutationError) -> Problem {
     match err {
         MutationError::ChatNotFound { .. } => {
             Problem::new(StatusCode::NOT_FOUND, "chat_not_found", "Chat not found")
@@ -264,11 +281,14 @@ fn mutation_error_to_problem(err: MutationError) -> Problem {
         MutationError::TurnNotFound { .. } => {
             Problem::new(StatusCode::NOT_FOUND, "turn_not_found", "Turn not found")
         }
-        MutationError::InsufficientPermissions => Problem::new(
-            StatusCode::FORBIDDEN,
-            "insufficient_permissions",
-            "You do not have permission to modify this turn",
-        ),
+        MutationError::InsufficientPermissions => {
+            warn!("insufficient permissions for turn mutation");
+            Problem::new(
+                StatusCode::FORBIDDEN,
+                "insufficient_permissions",
+                "You do not have permission to modify this turn",
+            )
+        }
         MutationError::InvalidTurnState { state } => Problem::new(
             StatusCode::BAD_REQUEST,
             "invalid_turn_state",
@@ -285,7 +305,7 @@ fn mutation_error_to_problem(err: MutationError) -> Problem {
             "Another generation is already in progress for this chat",
         ),
         MutationError::Internal { message } => {
-            warn!(%message, "turn mutation internal error");
+            warn!(error_message = %message, "turn mutation internal error");
             Problem::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal Error",
@@ -295,14 +315,18 @@ fn mutation_error_to_problem(err: MutationError) -> Problem {
     }
 }
 
-fn stream_error_to_response(err: StreamError) -> Response {
+/// Caller is expected to be within an instrumented span that carries
+/// `chat_id` and `turn_request_id` fields.
+fn stream_error_to_response(err: &StreamError) -> Response {
     match err {
         StreamError::QuotaExhausted {
             error_code,
             http_status,
         } => {
-            let status = StatusCode::from_u16(http_status).unwrap_or(StatusCode::TOO_MANY_REQUESTS);
-            Problem::new(status, "Quota Exhausted", &error_code).into_response()
+            info!(error_code = %error_code, http_status = *http_status, "quota exhausted, mutation rejected");
+            let status =
+                StatusCode::from_u16(*http_status).unwrap_or(StatusCode::TOO_MANY_REQUESTS);
+            Problem::new(status, "Quota Exhausted", error_code).into_response()
         }
         other => {
             warn!(error = ?other, "post-mutation stream error");

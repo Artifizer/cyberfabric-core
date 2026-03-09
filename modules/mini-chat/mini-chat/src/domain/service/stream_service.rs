@@ -6,7 +6,7 @@ use modkit_macros::domain_model;
 use modkit_security::{AccessScope, SecurityContext};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{Instrument, debug, info, warn};
 use uuid::Uuid;
 
 use crate::config::StreamingConfig;
@@ -821,6 +821,18 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
     tx: mpsc::Sender<StreamEvent>,
     fin_ctx: Option<FinalizationCtx<TR, MR>>,
 ) -> tokio::task::JoinHandle<StreamOutcome> {
+    let span = if let Some(ref fctx) = fin_ctx {
+        tracing::info_span!(
+            "provider_stream",
+            chat_id = %fctx.chat_id,
+            turn_request_id = %fctx.request_id,
+            turn_id = %fctx.turn_id,
+            model = %model,
+        )
+    } else {
+        tracing::info_span!("provider_stream", model = %model)
+    };
+
     tokio::spawn(async move {
         let stream_start = std::time::Instant::now();
         let mut first_token_time: Option<std::time::Duration> = None;
@@ -841,6 +853,11 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
             Ok(s) => s,
             Err(e) => {
                 // Provider failed before any events — finalize first, then emit error.
+                warn!(
+                    error = %e,
+                    raw_detail = e.raw_detail().unwrap_or(""),
+                    "LLM provider failed before stream start"
+                );
                 let (code, message) = normalize_error(&e);
 
                 if let Some(ref fctx) = fin_ctx {
@@ -916,9 +933,8 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                                 if first_token_time.is_none() {
                                     let ttft = stream_start.elapsed();
                                     first_token_time = Some(ttft);
-                                    debug!(
+                                    info!(
                                         time_to_first_token_ms = ttft.as_millis() as u64,
-                                        model = %model,
                                         "first token received"
                                     );
                                 }
@@ -927,7 +943,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                             let stream_event = StreamEvent::from(client_event);
                             if tx.send(stream_event).await.is_err() {
                                 // Receiver dropped (client disconnect handled by relay)
-                                debug!("channel closed, exiting provider task");
+                                info!("channel closed (client disconnect), exiting provider task");
                                 break;
                             }
                         }
@@ -999,7 +1015,6 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
             let elapsed = stream_start.elapsed();
             info!(
                 terminal = "cancelled",
-                model = %model,
                 duration_ms = elapsed.as_millis() as u64,
                 "stream cancelled"
             );
@@ -1044,7 +1059,6 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                 let elapsed = stream_start.elapsed();
                 info!(
                     terminal = "completed",
-                    model = %model,
                     input_tokens = usage.input_tokens,
                     output_tokens = usage.output_tokens,
                     duration_ms = elapsed.as_millis() as u64,
@@ -1137,7 +1151,6 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                 let elapsed = stream_start.elapsed();
                 warn!(
                     terminal = "incomplete",
-                    model = %model,
                     reason = %reason,
                     duration_ms = elapsed.as_millis() as u64,
                     "stream incomplete"
@@ -1210,12 +1223,13 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                 }
             }
             TerminalOutcome::Failed { error, usage, .. } => {
+                let raw_detail = error.raw_detail().map(ToOwned::to_owned);
                 let (code, message) = normalize_error(&error);
                 let elapsed = stream_start.elapsed();
                 warn!(
                     terminal = "failed",
-                    model = %model,
                     error_code = %code,
+                    raw_detail = raw_detail.as_deref().unwrap_or(""),
                     duration_ms = elapsed.as_millis() as u64,
                     "stream failed"
                 );
@@ -1270,7 +1284,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                 }
             }
         }
-    })
+    }.instrument(span))
 }
 
 #[cfg(test)]

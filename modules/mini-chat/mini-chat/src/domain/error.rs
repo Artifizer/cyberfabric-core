@@ -152,12 +152,19 @@ impl From<ScopeError> for DomainError {
 }
 
 impl From<authz_resolver_sdk::EnforcerError> for DomainError {
+    #[allow(clippy::cognitive_complexity)]
     fn from(e: authz_resolver_sdk::EnforcerError) -> Self {
-        tracing::error!(error = %e, "AuthZ scope resolution failed");
         match e {
-            authz_resolver_sdk::EnforcerError::Denied { .. }
-            | authz_resolver_sdk::EnforcerError::CompileFailed(_) => Self::Forbidden,
+            authz_resolver_sdk::EnforcerError::Denied { ref deny_reason } => {
+                tracing::warn!(deny_reason = ?deny_reason, "AuthZ denied access");
+                Self::Forbidden
+            }
+            authz_resolver_sdk::EnforcerError::CompileFailed(ref err) => {
+                tracing::warn!(error = %err, "AuthZ constraint compile failed - access denied");
+                Self::Forbidden
+            }
             authz_resolver_sdk::EnforcerError::EvaluationFailed(ref err) => {
+                tracing::error!(error = %err, "AuthZ evaluation failed (internal error)");
                 Self::internal(err.to_string())
             }
         }

@@ -68,8 +68,8 @@ impl From<DomainError> for Problem {
             )
             .with_trace_id(trace_id.unwrap_or_default()),
 
-            DomainError::Database { .. } | DomainError::InternalError { .. } => {
-                tracing::error!(error = ?e, "Internal error occurred");
+            DomainError::Database { message } | DomainError::InternalError { message } => {
+                tracing::error!(error_message = %message, "internal error occurred");
                 Problem::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal Error",
