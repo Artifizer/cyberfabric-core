@@ -196,6 +196,8 @@ struct FinalizationCtx<TR: TurnRepository + 'static, MR: MessageRepository + 'st
     provider_id: String,
     /// Metrics port for recording stream metrics in the spawned task.
     metrics: Arc<dyn MiniChatMetricsPort>,
+    /// Quota warnings provider for computing `quota_warnings` in the `done` event.
+    quota_warnings_provider: Arc<dyn crate::domain::service::quota_settler::QuotaWarningsProvider>,
 }
 
 impl<TR: TurnRepository + 'static, MR: MessageRepository + 'static> FinalizationCtx<TR, MR> {
@@ -524,10 +526,11 @@ impl<
         let user_id = ctx.subject_id();
 
         // ── Authorization ──
-        let scope = self
+        let chat_scope = self
             .enforcer
             .access_scope(&ctx, &resources::CHAT, actions::SEND_MESSAGE, Some(chat_id))
-            .await?;
+            .await?
+            .ensure_owner(ctx.subject_id());
 
         // Non-transactional connection for pre-stream checks (D6)
         let conn = self
@@ -539,12 +542,12 @@ impl<
 
         // ── Verify chat exists (scoped) ──
         self.chat_repo
-            .get(&conn, &scope, chat_id)
+            .get(&conn, &chat_scope, chat_id)
             .await
             .map_err(|e| StreamError::TurnCreationFailed { source: e })?
             .ok_or(StreamError::ChatNotFound { chat_id })?;
 
-        let scope = scope.tenant_only();
+        let scope = chat_scope.tenant_only();
 
         // ── Idempotency check (DESIGN §3.7 Check Priority Order) ──
         if let Some(existing_turn) = self
@@ -728,6 +731,8 @@ impl<
             period_starts,
             provider_id: provider_id.clone(),
             metrics: Arc::clone(&self.metrics),
+            quota_warnings_provider: Arc::clone(&self.quota)
+                as Arc<dyn crate::domain::service::quota_settler::QuotaWarningsProvider>,
         };
 
         // ── Context assembly ──
@@ -1308,6 +1313,8 @@ impl<
             period_starts,
             provider_id: provider_id.clone(),
             metrics: Arc::clone(&self.metrics),
+            quota_warnings_provider: Arc::clone(&self.quota)
+                as Arc<dyn crate::domain::service::quota_settler::QuotaWarningsProvider>,
         };
 
         // ── Context assembly ──
@@ -1402,7 +1409,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
     cancel: CancellationToken,
     tx: mpsc::Sender<StreamEvent>,
     fin_ctx: Option<FinalizationCtx<TR, MR>>,
-    provider_file_id_map: std::collections::HashMap<String, Uuid>,
+    provider_file_id_map: std::collections::HashMap<String, crate::domain::llm::AttachmentRef>,
 ) -> tokio::task::JoinHandle<StreamOutcome> {
     let span = if let Some(ref fctx) = fin_ctx {
         tracing::info_span!(
@@ -1839,6 +1846,18 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                                     ))
                                     .await;
                             }
+                            // Compute quota warnings post-commit (advisory, best-effort)
+                            let quota_warnings = match fctx
+                                .quota_warnings_provider
+                                .get_quota_warnings(&fctx.scope, fctx.tenant_id, fctx.user_id)
+                                .await
+                            {
+                                Ok(w) => Some(w),
+                                Err(e) => {
+                                    warn!(error = %e, "failed to compute quota_warnings");
+                                    None
+                                }
+                            };
                             let _ = tx
                                 .send(StreamEvent::Done(Box::new(DoneData {
                                     message_id: msg_id_str.clone(),
@@ -1848,6 +1867,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                                     quota_decision: fctx.quota_decision.clone(),
                                     downgrade_from: fctx.downgrade_from.clone(),
                                     downgrade_reason: fctx.downgrade_reason.clone(),
+                                    quota_warnings,
                                 })))
                                 .await;
                         }
@@ -1864,6 +1884,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                                     quota_decision: "allow".into(),
                                     downgrade_from: None,
                                     downgrade_reason: None,
+                                    quota_warnings: None,
                                 })))
                                 .await;
                         }
@@ -1890,6 +1911,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                             quota_decision: "allow".into(),
                             downgrade_from: None,
                             downgrade_reason: None,
+                            quota_warnings: None,
                         })))
                         .await;
                 }
@@ -1935,6 +1957,17 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                     );
                     match fctx.finalization_svc.finalize_turn_cas(input).await {
                         Ok(outcome) if outcome.won_cas => {
+                            let quota_warnings = match fctx
+                                .quota_warnings_provider
+                                .get_quota_warnings(&fctx.scope, fctx.tenant_id, fctx.user_id)
+                                .await
+                            {
+                                Ok(w) => Some(w),
+                                Err(e) => {
+                                    warn!(error = %e, "failed to compute quota_warnings");
+                                    None
+                                }
+                            };
                             let _ = tx
                                 .send(StreamEvent::Done(Box::new(DoneData {
                                     message_id: msg_id_str.clone(),
@@ -1944,6 +1977,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                                     quota_decision: fctx.quota_decision.clone(),
                                     downgrade_from: fctx.downgrade_from.clone(),
                                     downgrade_reason: fctx.downgrade_reason.clone(),
+                                    quota_warnings,
                                 })))
                                 .await;
                         }
@@ -1959,6 +1993,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                                     quota_decision: "allow".into(),
                                     downgrade_from: None,
                                     downgrade_reason: None,
+                                    quota_warnings: None,
                                 })))
                                 .await;
                         }
@@ -1973,6 +2008,7 @@ fn spawn_provider_task<TR: TurnRepository + 'static, MR: MessageRepository + 'st
                             quota_decision: "allow".into(),
                             downgrade_from: None,
                             downgrade_reason: None,
+                            quota_warnings: None,
                         })))
                         .await;
                 }
@@ -2087,6 +2123,23 @@ mod tests {
     use oagw_sdk::error::StreamingError;
 
     // ── Noop OutboxEnqueuer ──
+
+    #[allow(de0309_must_have_domain_model)]
+    struct NoopQuotaWarningsProvider;
+    #[async_trait::async_trait]
+    impl crate::domain::service::quota_settler::QuotaWarningsProvider for NoopQuotaWarningsProvider {
+        async fn get_quota_warnings(
+            &self,
+            _scope: &modkit_security::AccessScope,
+            _tenant_id: Uuid,
+            _user_id: Uuid,
+        ) -> Result<
+            Vec<crate::domain::stream_events::QuotaWarning>,
+            crate::domain::error::DomainError,
+        > {
+            Ok(Vec::new())
+        }
+    }
 
     #[allow(de0309_must_have_domain_model)]
     struct NoopOutboxEnqueuer;
@@ -3541,6 +3594,7 @@ mod tests {
             period_starts: Vec::new(),
             provider_id: "openai".to_owned(),
             metrics: Arc::new(crate::domain::ports::metrics::NoopMetrics),
+            quota_warnings_provider: Arc::new(NoopQuotaWarningsProvider),
         };
 
         let provider: Arc<dyn LlmProvider> = Arc::new(MockProvider::completed(&["Hello"]));
@@ -3797,7 +3851,7 @@ mod tests {
         assert!(done.downgrade_from.is_none());
 
         // Verify turn was created with real quota fields (not placeholder 1_000_000)
-        let scope = AccessScope::allow_all().tenant_only();
+        let scope = AccessScope::allow_all();
         let conn = db.conn().unwrap();
         let turn_repo = TurnRepo;
         let turn = turn_repo

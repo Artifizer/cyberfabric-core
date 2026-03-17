@@ -1,9 +1,10 @@
 use axum::Router;
 use modkit::api::OpenApiRegistry;
-use modkit::api::operation_builder::OperationBuilder;
+use modkit::api::operation_builder::{OperationBuilder, OperationBuilderODataExt};
 
 use super::AiChatLicense;
 use crate::api::rest::{dto, handlers};
+use crate::infra::db::odata_mapper::ChatCursorField;
 
 pub(super) fn register_chat_routes(
     mut router: Router,
@@ -50,6 +51,7 @@ pub(super) fn register_chat_routes(
             http::StatusCode::OK,
             "Paginated list of chats",
         )
+        .with_odata_filter::<ChatCursorField>()
         .error_400(openapi)
         .error_401(openapi)
         .error_403(openapi)

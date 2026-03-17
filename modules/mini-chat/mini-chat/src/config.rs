@@ -466,6 +466,9 @@ fn default_web_search_max_calls() -> u32 {
 fn default_web_search_daily_quota() -> u32 {
     75
 }
+fn default_warning_threshold_pct() -> u8 {
+    80
+}
 
 /// Quota enforcement configuration.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -477,6 +480,8 @@ pub struct QuotaConfig {
     pub web_search_max_calls_per_message: u32,
     #[serde(default = "default_web_search_daily_quota")]
     pub web_search_daily_quota: u32,
+    #[serde(default = "default_warning_threshold_pct")]
+    pub warning_threshold_pct: u8,
 }
 
 impl Default for QuotaConfig {
@@ -485,6 +490,7 @@ impl Default for QuotaConfig {
             overshoot_tolerance_factor: default_overshoot_tolerance(),
             web_search_max_calls_per_message: default_web_search_max_calls(),
             web_search_daily_quota: default_web_search_daily_quota(),
+            warning_threshold_pct: default_warning_threshold_pct(),
         }
     }
 }
@@ -502,6 +508,12 @@ impl QuotaConfig {
         }
         if self.web_search_daily_quota == 0 {
             return Err("web_search_daily_quota must be > 0".to_owned());
+        }
+        if self.warning_threshold_pct == 0 || self.warning_threshold_pct >= 100 {
+            return Err(format!(
+                "warning_threshold_pct must be 1-99, got {}",
+                self.warning_threshold_pct
+            ));
         }
         Ok(())
     }
@@ -658,6 +670,10 @@ pub struct RagConfig {
     /// Maximum single image file size in KB.
     #[serde(default = "default_max_image_size_kb")]
     pub max_image_size_kb: u32,
+
+    /// Accept `text/csv` uploads remapped to `text/plain` for `file_search`.
+    #[serde(default = "default_true")]
+    pub allow_csv_upload: bool,
 }
 
 impl Default for RagConfig {
@@ -667,6 +683,7 @@ impl Default for RagConfig {
             max_total_upload_mb_per_chat: default_max_total_upload_mb_per_chat(),
             max_document_size_kb: default_max_document_size_kb(),
             max_image_size_kb: default_max_image_size_kb(),
+            allow_csv_upload: true,
         }
     }
 }
