@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0009: Client-Initiated Streaming Cancellation
+# ADR-0008: Client-Initiated Streaming Cancellation
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Close HTTP connection](#option-1-close-http-connection)
+  - [Option 2: HTTP DELETE request](#option-2-http-delete-request)
+  - [Option 3: HTTP timeout](#option-3-http-timeout)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -74,11 +91,10 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-nfr-streaming` - Minimal latency for cancellation response
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message` - is_complete field indicates cancelled messages
+* `cpt-cf-chat-engine-design-entity-message` - is_complete field indicates cancelled messages
 * HTTP connection close mechanism (Section 3.3.1 of DESIGN.md)
 * Sequence diagram S11 (Stop Streaming Response)
 
 **Related ADRs**:
 * ADR-0003 (Streaming Architecture) - Depends on this for complete streaming lifecycle
-* ADR-0007 (HTTP Client Protocol) - HTTP streaming client protocol with cancellation
-* ADR-0006 (Webhook Protocol) - HTTP request cancellation to backend
+* ADR-0006 (HTTP Client Protocol) - HTTP streaming client protocol with cancellation

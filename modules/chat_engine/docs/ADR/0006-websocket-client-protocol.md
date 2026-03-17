@@ -1,6 +1,31 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0007: HTTP Streaming Protocol for Client Communication
+# ADR-0006: HTTP Streaming Protocol for Client Communication
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Protocol Details](#protocol-details)
+  - [Authentication](#authentication)
+  - [CRUD Operations (HTTP REST)](#crud-operations-http-rest)
+  - [Streaming Operations (HTTP Chunked Transfer)](#streaming-operations-http-chunked-transfer)
+  - [Streaming Event Types](#streaming-event-types)
+  - [Cancellation Mechanism](#cancellation-mechanism)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: HTTP REST + WebSocket split](#option-1-http-rest--websocket-split)
+  - [Option 2: HTTP with chunked streaming (NDJSON)](#option-2-http-with-chunked-streaming-ndjson)
+  - [Option 3: HTTP/2 Server-Sent Events (SSE)](#option-3-http2-server-sent-events-sse)
+  - [Option 4: gRPC streaming](#option-4-grpc-streaming)
+- [Related Design Elements](#related-design-elements)
+- [References](#references)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -169,9 +194,8 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 
 **Related ADRs**:
 * ADR-0003 (Streaming Architecture) - HTTP streaming architecture principles
-* ADR-0006 (Webhook Protocol) - Backend webhook protocol (also HTTP streaming)
-* ADR-0009 (Client-Initiated Streaming Cancellation) - Client cancellation via connection close
-* ADR-0010 (Stateless Scaling) - Stateless architecture enabled by HTTP
+* ADR-0008 (Client-Initiated Streaming Cancellation) - Client cancellation via connection close
+* ADR-0009 (Stateless Scaling) - Stateless architecture enabled by HTTP
 
 ## References
 

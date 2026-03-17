@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0018: Session Type Switching with Capability Updates
+# ADR-0015: Session Type Switching with Capability Updates
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Update session_type_id, route next message to new plugin (chosen)](#option-1-update-sessiontypeid-route-next-message-to-new-plugin-chosen)
+  - [Option 2: Create new session, copy history](#option-2-create-new-session-copy-history)
+  - [Option 3: Message-level backend tracking](#option-3-message-level-backend-tracking)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -82,11 +99,11 @@ Confirmed when switching `session_type_id` causes the next message to be routed 
 * `cpt-cf-chat-engine-fr-send-message` - Routing uses current session_type_id
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-session` - session_type_id field (mutable)
-* `cpt-cf-chat-engine-entity-session-type` - References `plugin_instance_id` per backend type
+* `cpt-cf-chat-engine-design-entity-session` - session_type_id field (mutable)
+* `cpt-cf-chat-engine-design-entity-session-type` - References `plugin_instance_id` per backend type
 * Sequence diagram S4 (Switch Session Type Mid-Conversation)
 
 **Related ADRs**:
 * ADR-0002 (Capability Model) - New plugin provides updated `available_capabilities` via `on_session_type_configured`
-* ADR-0026 (Plugin Backend Integration) - Plugin trait methods; `on_message` receives full history
-* ADR-0022 (Per-Request Capability Filtering) - Client can enable/disable capabilities per message
+* ADR-0022 (Plugin Backend Integration) - Plugin trait methods; `on_message` receives full history
+* ADR-0018 (Per-Request Capability Filtering) - Client can enable/disable capabilities per message

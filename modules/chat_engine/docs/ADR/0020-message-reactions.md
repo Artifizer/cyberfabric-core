@@ -1,6 +1,27 @@
 Created:  2026-02-11 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0024: Message Reactions with Simple Like/Dislike
+# ADR-0020: Message Reactions with Simple Like/Dislike
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Technical Design](#technical-design)
+  - [Database Schema](#database-schema)
+  - [HTTP API](#http-api)
+  - [Webhook Event](#webhook-event)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Separate reaction table with UPSERT and fire-and-forget webhook](#option-1-separate-reaction-table-with-upsert-and-fire-and-forget-webhook)
+  - [Option 2: Reaction counts in messages table](#option-2-reaction-counts-in-messages-table)
+  - [Option 3: Rich reaction system with emoji](#option-3-rich-reaction-system-with-emoji)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-11
 
@@ -109,7 +130,7 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-nfr-data-integrity` - Composite PK enforces one reaction per user per message
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message-reaction` - Reaction entity with composite key
+* `cpt-cf-chat-engine-design-entity-message-reaction` - Reaction entity with composite key
 * cpt-cf-chat-engine-api-http-reaction - HTTP endpoint POST /messages/{id}/reaction
 * cpt-cf-chat-engine-webhook-message-reaction - Webhook event message.reaction
 * `cpt-cf-chat-engine-principle-immutable-tree` - Reactions don't modify messages
@@ -118,5 +139,4 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 **Related ADRs**:
 * ADR-0001 (Message Tree with Immutable Parents) - Reactions preserve message immutability
 * ADR-0004 (Zero Business Logic in Routing) - Chat Engine stores reactions, backend validates via webhook
-* ADR-0006 (Webhook Protocol) - Reaction webhook uses fire-and-forget pattern
-* ADR-0010 (Stateless Service Design) - Reaction state in database, any instance can handle requests
+* ADR-0009 (Stateless Service Design) - Reaction state in database, any instance can handle requests

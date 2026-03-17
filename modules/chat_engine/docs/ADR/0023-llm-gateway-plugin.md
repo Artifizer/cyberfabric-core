@@ -5,13 +5,37 @@ status: accepted
 date: 2026-03-06
 ---
 
-# ADR-0027: LLM Gateway Plugin
+# ADR-0023: LLM Gateway Plugin
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Plugin Lifecycle](#plugin-lifecycle)
+  - [External Service Dependencies](#external-service-dependencies)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Model Registry + GTS derived schemas (chosen)](#option-1-model-registry--gts-derived-schemas-chosen)
+  - [Option 2: Hardcoded capabilities + GTS derived schemas](#option-2-hardcoded-capabilities--gts-derived-schemas)
+  - [Option 3: All config in SessionType.metadata](#option-3-all-config-in-sessiontypemetadata)
+- [Capability Resolution via Model Registry](#capability-resolution-via-model-registry)
+  - [Capability Refresh on Model Change (`on_session_updated`)](#capability-refresh-on-model-change-onsessionupdated)
+- [Schema Extensions](#schema-extensions)
+  - [Metadata Schemas](#metadata-schemas)
+  - [Entity Schemas](#entity-schemas)
+- [Traceability](#traceability)
+
+<!-- /toc -->
 
 **ID**: `cpt-cf-chat-engine-adr-llm-gateway-plugin`
 
 ## Context and Problem Statement
 
-Chat Engine defines a generic plugin interface (`ChatEngineBackendPlugin` trait, ADR-0026) for backend integrations. The first concrete plugin is the **LLM gateway plugin** — it connects Chat Engine to an LLM gateway service and a Model Registry service. The plugin must solve three concerns without modifying Chat Engine core:
+Chat Engine defines a generic plugin interface (`ChatEngineBackendPlugin` trait, ADR-0022) for backend integrations. The first concrete plugin is the **LLM gateway plugin** — it connects Chat Engine to an LLM gateway service and a Model Registry service. The plugin must solve three concerns without modifying Chat Engine core:
 
 1. **Capability resolution** — determine which LLM parameters (model, temperature, max_tokens, web_search) are available for a given session type and expose them through the capabilities system (ADR-0002)
 2. **Schema extension** — store LLM-specific data (response facts, token usage, plugin configuration) in Chat Engine's `metadata` JSONB fields with typed validation
@@ -194,6 +218,6 @@ GTS entity schemas registered by LLM gateway plugin (extend base Chat Engine sch
 - **DESIGN**: [DESIGN.md](../DESIGN.md)
 
 * `cpt-cf-chat-engine-fr-schema-extensibility` — GTS derived schema registration is the mechanism used to extend metadata fields
-* `cpt-cf-chat-engine-adr-plugin-backend-integration` — plugin system and trait interface (ADR-0026)
+* `cpt-cf-chat-engine-adr-plugin-backend-integration` — plugin system and trait interface (ADR-0022)
 * `cpt-cf-chat-engine-adr-capability-model` — capabilities for user-selectable LLM params (ADR-0002)
-* `cpt-cf-chat-engine-adr-session-metadata` — JSONB extension point and GTS validation strategy (ADR-0020)
+* `cpt-cf-chat-engine-adr-session-metadata` — JSONB extension point and GTS validation strategy (ADR-0017)

@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0014: Message Variants with Index and Active Flag
+# ADR-0011: Message Variants with Index and Active Flag
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: variant_index + is_active flags](#option-1-variantindex--isactive-flags)
+  - [Option 2: Separate variants table](#option-2-separate-variants-table)
+  - [Option 3: Version field with timestamps](#option-3-version-field-with-timestamps)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -76,10 +93,10 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-nfr-data-integrity` - Unique constraint on (session_id, parent_message_id, variant_index)
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message` - variant_index and is_active fields
+* `cpt-cf-chat-engine-design-entity-message` - variant_index and is_active fields
 * `cpt-cf-chat-engine-dbtable-messages` - Unique constraint enforcing variant integrity
 
 **Related ADRs**:
 * ADR-0001 (Message Tree Structure) - Variants are siblings in tree
-* ADR-0015 (Variant Index for Sequential Navigation) - UI navigation using variant_index
-* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Recreation creates variant (same parent)
+* ADR-0012 (Variant Index for Sequential Navigation) - UI navigation using variant_index
+* ADR-0013 (Recreation Creates Variants, Branching Creates Children) - Recreation creates variant (same parent)

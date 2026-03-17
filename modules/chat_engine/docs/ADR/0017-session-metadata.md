@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0020: Session Metadata JSONB for Extensibility
+# ADR-0017: Session Metadata JSONB for Extensibility
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: JSONB metadata column](#option-1-jsonb-metadata-column)
+  - [Option 2: Fixed columns](#option-2-fixed-columns)
+  - [Option 3: Metadata table](#option-3-metadata-table)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -77,10 +94,10 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-fr-session-summary` - Summary stored in metadata
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-session` - metadata field (JSONB)
+* `cpt-cf-chat-engine-design-entity-session` - metadata field (JSONB)
 * `cpt-cf-chat-engine-dbtable-sessions` - metadata column with GIN index
 * HTTP GET /sessions/{id} returns metadata
 
 **Related ADRs**:
-* ADR-0010 (Stateless Horizontal Scaling with Database State) - PostgreSQL JSONB support
-* ADR-0023 (PostgreSQL Full-Text Search with GIN Indexes) - Full-text search includes metadata fields
+* ADR-0009 (Stateless Horizontal Scaling with Database State) - PostgreSQL JSONB support
+* ADR-0019 (PostgreSQL Full-Text Search with GIN Indexes) - Full-text search includes metadata fields

@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0016: Recreation Creates Variants, Branching Creates Children
+# ADR-0013: Recreation Creates Variants, Branching Creates Children
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Recreation = variant (sibling), Branch = child](#option-1-recreation--variant-sibling-branch--child)
+  - [Option 2: Both create children](#option-2-both-create-children)
+  - [Option 3: Recreation = update](#option-3-recreation--update)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -73,12 +90,12 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-fr-branch-message` - Creates child with specified parent_message_id
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message` - variant_index for variants, parent_message_id for tree
+* `cpt-cf-chat-engine-design-entity-message` - variant_index for variants, parent_message_id for tree
 * Webhook event message.recreate vs message.new (Section 3.3.2 of DESIGN.md)
 * Sequence diagrams S6 (Recreate) vs S7 (Branch)
 
 **Related ADRs**:
 * ADR-0001 (Message Tree Structure) - Tree structure enables both operations
-* ADR-0014 (Message Variants with Index and Active Flag) - Recreation creates variants using variant_index
-* ADR-0017 (Conversation Branching from Any Historical Message) - Branching creates children in tree
-* ADR-0008 (Webhook Event Schema with Typed Events) - Different events for recreation vs branching
+* ADR-0011 (Message Variants with Index and Active Flag) - Recreation creates variants using variant_index
+* ADR-0014 (Conversation Branching from Any Historical Message) - Branching creates children in tree
+* ADR-0007 (Webhook Event Schema with Typed Events) - Different events for recreation vs branching

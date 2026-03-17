@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0010: Stateless Horizontal Scaling with Database State
+# ADR-0009: Stateless Horizontal Scaling with Database State
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Stateless instances with database state](#option-1-stateless-instances-with-database-state)
+  - [Option 2: Stateful instances with sticky sessions](#option-2-stateful-instances-with-sticky-sessions)
+  - [Option 3: Redis cache layer](#option-3-redis-cache-layer)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -80,6 +97,5 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * All components designed as stateless services
 
 **Related ADRs**:
-* ADR-0010 (Stateless Horizontal Scaling with Database State) - Database provides all persistent state
-* ADR-0007 (HTTP Client Protocol) - Stateless HTTP protocol enables true horizontal scaling
-* ADR-0011 (Circuit Breaker per Webhook Backend) - Circuit breaker state per instance (not shared)
+* ADR-0009 (Stateless Horizontal Scaling with Database State) - Database provides all persistent state
+* ADR-0006 (HTTP Client Protocol) - Stateless HTTP protocol enables true horizontal scaling

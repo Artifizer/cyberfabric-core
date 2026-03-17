@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0022: Per-Request Capability Filtering
+# ADR-0018: Per-Request Capability Filtering
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: enabled_capabilities array per message](#option-1-enabledcapabilities-array-per-message)
+  - [Option 2: Session-level toggle](#option-2-session-level-toggle)
+  - [Option 3: Implicit capabilities](#option-3-implicit-capabilities)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -78,11 +95,10 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-fr-create-session` - Session stores `enabled_capabilities: Capability[]`
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-session` - `enabled_capabilities: Capability[]` (authoritative type registry)
+* `cpt-cf-chat-engine-design-entity-session` - `enabled_capabilities: Capability[]` (authoritative type registry)
 * HTTP POST /messages/send — `enabled_capabilities: CapabilityValue[]`
 * Webhook `message.new` event — `enabled_capabilities: CapabilityValue[]`
 
 **Related ADRs**:
 * ADR-0002 (Capability Model) - Backend defines `enabled_capabilities` (Capability definitions)
-* ADR-0006 (Webhook Protocol) - enabled_capabilities forwarded in webhook events
-* ADR-0018 (Session Type Switching with Capability Updates) - Capabilities update when switching backends
+* ADR-0015 (Session Type Switching with Capability Updates) - Capabilities update when switching backends

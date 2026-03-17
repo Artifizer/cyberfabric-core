@@ -2,6 +2,23 @@ Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
 # ADR-0001: Message Tree with Immutable Parents
 
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Immutable tree with parent_message_id](#option-1-immutable-tree-with-parentmessageid)
+  - [Option 2: Mutable linked list](#option-2-mutable-linked-list)
+  - [Option 3: Graph structure with edge table](#option-3-graph-structure-with-edge-table)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
+
 **Date**: 2026-02-04
 
 **Status**: accepted
@@ -88,11 +105,11 @@ Confirmed via design review and alignment with DESIGN.md implementation.
 * `cpt-cf-chat-engine-nfr-data-integrity` - Database constraints enforce tree structure integrity
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message` - Core entity implementing tree structure
+* `cpt-cf-chat-engine-design-entity-message` - Core entity implementing tree structure
 * `cpt-cf-chat-engine-principle-immutable-tree` - Design principle mandating immutability
 * `cpt-cf-chat-engine-design-context-tree-traversal` - Implementation details for traversal queries
 
 **Related ADRs**:
-* ADR-0014 (Message Variants with Index and Active Flag) - Depends on this tree structure
-* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Uses parent_message_id to create variants
-* ADR-0017 (Conversation Branching from Any Historical Message) - Leverages tree structure for branching
+* ADR-0011 (Message Variants with Index and Active Flag) - Depends on this tree structure
+* ADR-0013 (Recreation Creates Variants, Branching Creates Children) - Uses parent_message_id to create variants
+* ADR-0014 (Conversation Branching from Any Historical Message) - Leverages tree structure for branching

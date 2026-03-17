@@ -1,16 +1,35 @@
 Created:  2026-02-23 by Constructor Tech
 Updated:  2026-03-09 by Constructor Tech
-# ADR-0026: Internal Plugin Interface for Backend Integration
+# ADR-0022: Internal Plugin Interface for Backend Integration
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: HTTP webhooks (former approach)](#option-1-http-webhooks-former-approach)
+  - [Option 2: Internal plugin trait (pure)](#option-2-internal-plugin-trait-pure)
+  - [Option 3: Hybrid (chosen)](#option-3-hybrid-chosen)
+- [Plugin API Contract](#plugin-api-contract)
+- [N:1 Session Types → Plugin](#n1-session-types--plugin)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-23
 
-**Status**: accepted — supersedes ADR-0006 (Synchronous HTTP Webhooks with Streaming)
+**Status**: accepted — supersedes former ADR "Synchronous HTTP Webhooks with Streaming", "Circuit Breaker per Webhook Backend", "Per-Session-Type Timeout Configuration" (removed)
 
 **ID**: `cpt-cf-chat-engine-adr-plugin-backend-integration`
 
 ## Context and Problem Statement
 
-ADR-0006 established HTTP webhooks as the integration mechanism between Chat Engine and message-processing backends: Chat Engine made outbound HTTP POST requests to a `webhook_url` configured per session type and handled all resilience concerns (auth, retry, circuit breaker, timeout) itself. This approach couples Chat Engine to transport-level details and forces every deployment to duplicate resilience infrastructure.
+The former "Synchronous HTTP Webhooks" ADR established HTTP webhooks as the integration mechanism between Chat Engine and message-processing backends: Chat Engine made outbound HTTP POST requests to a `webhook_url` configured per session type and handled all resilience concerns (auth, retry, circuit breaker, timeout) itself. This approach couples Chat Engine to transport-level details and forces every deployment to duplicate resilience infrastructure.
 
 In practice, backend integrations are implemented as **code modules within Chat Engine** — not as independently deployed external services. A plugin is a Rust module inside the Chat Engine codebase that implements the `ChatEngineBackendPlugin` trait. The plugin decides how to communicate with external services (HTTP, gRPC, vector DB, etc.); Chat Engine is not involved in that transport. How should Chat Engine integrate with backend plugins while keeping its core free of transport, auth, and resilience logic?
 
@@ -25,7 +44,7 @@ In practice, backend integrations are implemented as **code modules within Chat 
 
 ## Considered Options
 
-* **Option 1: HTTP webhooks (ADR-0006)** — Chat Engine makes outbound HTTP POST to `webhook_url` per session type; manages auth, retry, circuit breaker itself
+* **Option 1: HTTP webhooks (former approach)** — Chat Engine makes outbound HTTP POST to `webhook_url` per session type; manages auth, retry, circuit breaker itself
 * **Option 2: Internal plugin trait** — plugins are code inside Chat Engine implementing `ChatEngineBackendPlugin`; Chat Engine calls trait methods directly; each plugin manages its own outbound communication
 * **Option 3: Hybrid** — internal plugin trait as primary; a first-party `webhook-compat` plugin wraps legacy HTTP webhook-based external services
 
@@ -60,7 +79,7 @@ Confirmed when:
 
 ## Pros and Cons of the Options
 
-### Option 1: HTTP webhooks (ADR-0006)
+### Option 1: HTTP webhooks (former approach)
 
 Chat Engine makes outbound HTTP POST to `webhook_url` per session type and manages all resilience logic.
 
@@ -117,14 +136,14 @@ Multiple session types can share the same `plugin_instance_id`. Each session typ
 * `cpt-cf-chat-engine-fr-create-session` — plugin `on_session_created` call replaces session.created webhook event
 * `cpt-cf-chat-engine-fr-schema-extensibility` — plugin registers GTS derived schemas at startup
 
-**Superseded ADRs**:
+**Superseded ADRs** (removed):
 
-* ADR-0006 (Webhook Protocol) — superseded; `webhook_url` replaced by `plugin_instance_id`
-* ADR-0011 (Circuit Breaker) — responsibility moved to plugin
-* ADR-0013 (Timeout Configuration) — responsibility moved to plugin
+* Former "Synchronous HTTP Webhooks with Streaming" — `webhook_url` replaced by `plugin_instance_id`
+* Former "Circuit Breaker per Webhook Backend" — responsibility moved to plugin
+* Former "Per-Session-Type Timeout Configuration" — responsibility moved to plugin
 
 **Related ADRs**:
 
 * ADR-0003 (Streaming Architecture) — unchanged; plugin provides `ResponseStream`
-* ADR-0010 (Stateless Scaling) — unchanged; plugin resolved per-request from registry
-* ADR-0027 (LLM Gateway Plugin) — first concrete plugin implementation
+* ADR-0009 (Stateless Scaling) — unchanged; plugin resolved per-request from registry
+* ADR-0023 (LLM Gateway Plugin) — first concrete plugin implementation

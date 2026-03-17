@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0017: Conversation Branching from Any Historical Message
+# ADR-0014: Conversation Branching from Any Historical Message
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Parent reference with history truncation](#option-1-parent-reference-with-history-truncation)
+  - [Option 2: Copy-on-write](#option-2-copy-on-write)
+  - [Option 3: Diff-based branches](#option-3-diff-based-branches)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -78,11 +95,11 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-usecase-branch-message` - Full use case for branching
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message` - parent_message_id enables branching
+* `cpt-cf-chat-engine-design-entity-message` - parent_message_id enables branching
 * `cpt-cf-chat-engine-design-context-tree-traversal` - Recursive CTE for history loading
 * Sequence diagram S7 (Branch from Historical Message)
 
 **Related ADRs**:
 * ADR-0001 (Message Tree Structure) - Tree structure enables branching
-* ADR-0014 (Message Variants with Index and Active Flag) - Variants vs branches distinction
-* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - Branching creates children (not variants)
+* ADR-0011 (Message Variants with Index and Active Flag) - Variants vs branches distinction
+* ADR-0013 (Recreation Creates Variants, Branching Creates Children) - Branching creates children (not variants)

@@ -2,6 +2,25 @@ Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
 # ADR-0005: External File Storage for File Attachments
 
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+  - [UUID vs URL Approach](#uuid-vs-url-approach)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Separate File Storage service with UUID identifiers](#option-1-separate-file-storage-service-with-uuid-identifiers)
+  - [Option 2: Separate File Storage service with URL identifiers](#option-2-separate-file-storage-service-with-url-identifiers)
+  - [Option 3: Database BLOB storage](#option-3-database-blob-storage)
+  - [Option 4: Chat Engine file service](#option-4-chat-engine-file-service)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
+
 **Date**: 2026-02-04
 
 **Status**: accepted
@@ -108,10 +127,9 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-nfr-response-time` - File handling off critical path
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-message` - Contains file_ids (UUID array) not file content or URLs
+* `cpt-cf-chat-engine-design-entity-message` - Contains file_ids (UUID array) not file content or URLs
 * `cpt-cf-chat-engine-constraint-external-storage` - Design constraint mandating separate File Storage service
 * `cpt-cf-chat-engine-design-context-file-storage` - Implementation details for UUID-based file access
 
 **Related ADRs**:
-* ADR-0006 (Webhook Protocol) - File URLs forwarded to backends in message payload
-* ADR-0010 (Stateless Horizontal Scaling with Database State) - Database not used for file content storage
+* ADR-0009 (Stateless Horizontal Scaling with Database State) - Database not used for file content storage

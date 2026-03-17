@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0012: Streaming Backpressure with Buffer Limits
+# ADR-0010: Streaming Backpressure with Buffer Limits
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Per-stream buffer with limit and pause](#option-1-per-stream-buffer-with-limit-and-pause)
+  - [Option 2: Unbounded buffering](#option-2-unbounded-buffering)
+  - [Option 3: Drop chunks](#option-3-drop-chunks)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -81,5 +98,4 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 
 **Related ADRs**:
 * ADR-0003 (Streaming Architecture) - Streaming design depends on backpressure handling
-* ADR-0006 (Webhook Protocol) - HTTP/2 flow control for backend pause
-* ADR-0009 (Client-Initiated Streaming Cancellation) - Client cancellation releases buffer
+* ADR-0008 (Client-Initiated Streaming Cancellation) - Client cancellation releases buffer

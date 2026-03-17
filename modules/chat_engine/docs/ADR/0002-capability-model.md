@@ -2,6 +2,22 @@ Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
 # ADR-0002: Capability Model
 
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Plugin provides catalog during session type configuration, user selects values](#option-1-plugin-provides-catalog-during-session-type-configuration-user-selects-values)
+  - [Option 2: Capabilities configured in Chat Engine only](#option-2-capabilities-configured-in-chat-engine-only)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
+
 **Date**: 2026-02-04
 
 **Status**: accepted
@@ -36,7 +52,7 @@ Chosen option: "Plugin provides catalog during session type configuration, user 
 
 * Good, because clients discover available capabilities before session creation via `SessionType.available_capabilities`
 * Good, because capability `name`, `description`, and `type` enable rich UI for capability selection
-* Good, because capability `default_value` allows per-message `CapabilityValue[]` to be optional (see ADR-0022)
+* Good, because capability `default_value` allows per-message `CapabilityValue[]` to be optional (see ADR-0018)
 * Good, because `enum_values` enables client-side validation for enum capabilities
 * Good, because users control capability activation and values (cost optimization, privacy)
 * Good, because Chat Engine doesn't need to understand capability semantics (stores and forwards)
@@ -73,20 +89,19 @@ Admin configures capabilities via Chat Engine UI/API per session type with no us
 **Actors**:
 * `cpt-cf-chat-engine-actor-developer` - Configures a session type by assigning a plugin; `available_capabilities` are populated automatically via `plugin.on_session_type_configured()`
 * `cpt-cf-chat-engine-actor-client` - Selects `Session.enabled_capabilities` from the catalog; enables/disables features in UI
-* `cpt-cf-chat-engine-actor-backend-plugin` - Receives user-selected `CapabilityValue[]` per message (see ADR-0022); does not define capabilities
+* `cpt-cf-chat-engine-actor-backend-plugin` - Receives user-selected `CapabilityValue[]` per message (see ADR-0018); does not define capabilities
 
 **Requirements**:
 * `cpt-cf-chat-engine-fr-create-session` - Session stores user-selected `enabled_capabilities`
 * `cpt-cf-chat-engine-fr-switch-session-type` - New session type catalog replaces available capabilities
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-session-type` - Includes `available_capabilities: Capability[]` (developer-configured catalog, required field)
-* `cpt-cf-chat-engine-entity-session` - Stores `enabled_capabilities: Capability[]` (user-selected subset of the catalog)
-* `cpt-cf-chat-engine-entity-capability` - `Capability` schema: `{id, name, description?, type, default_value, enum_values?}` — used in both tiers
-* `cpt-cf-chat-engine-entity-capability-value` - `CapabilityValue` schema: `{id, value}` — per-message capability override (see ADR-0022)
+* `cpt-cf-chat-engine-design-entity-session-type` - Includes `available_capabilities: Capability[]` (developer-configured catalog, required field)
+* `cpt-cf-chat-engine-design-entity-session` - Stores `enabled_capabilities: Capability[]` (user-selected subset of the catalog)
+* `cpt-cf-chat-engine-design-entity-capability` - `Capability` schema: `{id, name, description?, type, default_value, enum_values?}` — used in both tiers
+* `cpt-cf-chat-engine-design-entity-capability-value` - `CapabilityValue` schema: `{id, value}` — per-message capability override (see ADR-0018)
 * `cpt-cf-chat-engine-principle-backend-authority` - Backend plugin declares available capabilities via `on_session_type_configured` and receives user-selected values per message
 
 **Related ADRs**:
-* ADR-0006 (Webhook Protocol) - Defines events using `enabled_capabilities`
-* ADR-0018 (Session Type Switching with Capability Updates) - Capability catalog changes when switching session type
-* ADR-0022 (Per-Request Capability Filtering) - Client sends `CapabilityValue[]` per message; `Capability.default_value` makes per-message values optional
+* ADR-0015 (Session Type Switching with Capability Updates) - Capability catalog changes when switching session type
+* ADR-0018 (Per-Request Capability Filtering) - Client sends `CapabilityValue[]` per message; `Capability.default_value` makes per-message values optional

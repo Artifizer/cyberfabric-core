@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0008: Webhook Event Schema with Typed Events
+# ADR-0007: Webhook Event Schema with Typed Events
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Typed events with event field](#option-1-typed-events-with-event-field)
+  - [Option 2: Separate endpoints per event](#option-2-separate-endpoints-per-event)
+  - [Option 3: Generic events with action hints](#option-3-generic-events-with-action-hints)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -81,5 +98,4 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * `cpt-cf-chat-engine-component-webhook-integration` - Event payload construction
 
 **Related ADRs**:
-* ADR-0006 (Webhook Protocol) - HTTP protocol carrying these events
-* ADR-0016 (Recreation Creates Variants, Branching Creates Children) - message.recreate event semantics
+* ADR-0013 (Recreation Creates Variants, Branching Creates Children) - message.recreate event semantics

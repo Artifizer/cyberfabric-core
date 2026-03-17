@@ -2,6 +2,23 @@ Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
 # ADR-0004: Zero Business Logic in Routing Layer
 
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Zero business logic (pure routing)](#option-1-zero-business-logic-pure-routing)
+  - [Option 2: Enrichment layer](#option-2-enrichment-layer)
+  - [Option 3: Smart routing](#option-3-smart-routing)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
+
 **Date**: 2026-02-04
 
 **Status**: accepted
@@ -80,5 +97,4 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 
 **Related ADRs**:
 * ADR-0002 (Capability Model) - Backends define capabilities, not Chat Engine
-* ADR-0006 (Webhook Protocol) - Protocol passes content unchanged
-* ADR-0008 (Webhook Event Schema with Typed Events) - Events carry full context without interpretation
+* ADR-0007 (Webhook Event Schema with Typed Events) - Events carry full context without interpretation

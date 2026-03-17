@@ -2,6 +2,35 @@ Created:  2026-03-06 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
 # Technical Design: Chat Engine
 
+
+<!-- toc -->
+
+- [1. Architecture Overview](#1-architecture-overview)
+  - [1.1 Architectural Vision](#11-architectural-vision)
+  - [1.2 Architecture Drivers](#12-architecture-drivers)
+  - [1.3 Architecture Layers](#13-architecture-layers)
+- [2. Principles & Constraints](#2-principles--constraints)
+  - [2.1 Design Principles](#21-design-principles)
+  - [2.2 Constraints](#22-constraints)
+- [3. Technical Architecture](#3-technical-architecture)
+  - [3.1 Domain Model](#31-domain-model)
+  - [3.2 Architecture Overview](#32-architecture-overview)
+  - [3.2.1 Component Model](#321-component-model)
+  - [3.3 API Contracts](#33-api-contracts)
+  - [3.3.1 Internal Dependencies](#331-internal-dependencies)
+  - [3.3.2 External Dependencies](#332-external-dependencies)
+  - [3.4 Interactions & Sequences](#34-interactions--sequences)
+  - [3.4.1 Database schemas & tables](#341-database-schemas--tables)
+  - [3.5 Authorization Model](#35-authorization-model)
+  - [3.6 Data Protection](#36-data-protection)
+  - [3.7 Data Consistency](#37-data-consistency)
+  - [3.8 Observability](#38-observability)
+  - [3.9 Testing Architecture](#39-testing-architecture)
+- [4. Additional Context](#4-additional-context)
+- [5. Intentional Exclusions](#5-intentional-exclusions)
+
+<!-- /toc -->
+
 ## 1. Architecture Overview
 
 ### 1.1 Architectural Vision
@@ -21,7 +50,7 @@ The system supports both **linear conversations** (traditional chat) and **non-l
 
 ### 1.2 Architecture Drivers
 
-#### Functional Requirements
+#### Functional Drivers
 
 | FDD ID | Solution Description |
 |--------|----------------------|
@@ -90,6 +119,16 @@ The system supports both **linear conversations** (traditional chat) and **non-l
 | `cpt-cf-chat-engine-adr-session-deletion-strategy` | Soft delete as default with automatic hard delete after retention period |
 | `cpt-cf-chat-engine-adr-plugin-backend-integration` | Internal plugin trait for backend integration |
 | `cpt-cf-chat-engine-adr-llm-gateway-plugin` | LLM gateway plugin with schema extensions |
+
+#### NFR Allocation
+
+| NFR ID | Design Element | How Addressed |
+|--------|---------------|---------------|
+| `cpt-cf-chat-engine-nfr-response-time` | Stateless routing, async I/O | Direct plugin invocation without intermediate queuing; streaming starts immediately |
+| `cpt-cf-chat-engine-nfr-availability` | Stateless scaling | Horizontal scaling with no shared in-memory state; database is single point of persistence |
+| `cpt-cf-chat-engine-nfr-scalability` | Stateless architecture | Any instance can handle any session; load balancer distributes evenly |
+| `cpt-cf-chat-engine-nfr-streaming-performance` | HTTP chunked transfer | NDJSON streaming with backpressure; chunks forwarded as received from plugin |
+| `cpt-cf-chat-engine-nfr-data-integrity` | ACID transactions | All state mutations wrapped in database transactions; message tree immutability enforced |
 
 ### 1.3 Architecture Layers
 
@@ -247,31 +286,31 @@ All Chat Engine instances share a single database cluster. No local caching of s
 
 ##### Session
 
-- [ ] `p1` - **ID**: `cpt-cf-chat-engine-entity-session`
+- [ ] `p1` - **ID**: `cpt-cf-chat-engine-design-entity-session`
 
 Session entity (session_id, client_id, user_id, tenant_id, session_type_id, enabled_capabilities, metadata, created_at, updated_at, share_token)
 
 ##### Message
 
-- [ ] `p1` - **ID**: `cpt-cf-chat-engine-entity-message`
+- [ ] `p1` - **ID**: `cpt-cf-chat-engine-design-entity-message`
 
 Message entity (message_id, session_id, parent_message_id, role, content, file_ids, variant_index, is_active, is_complete, metadata, created_at)
 
 ##### SessionType
 
-- [ ] `p1` - **ID**: `cpt-cf-chat-engine-entity-session-type`
+- [ ] `p1` - **ID**: `cpt-cf-chat-engine-design-entity-session-type`
 
 Binding of a plugin and its configuration (session_type_id, name, plugin_instance_id, available_capabilities, metadata, retention_policy)
 
 ##### Capability
 
-- [ ] `p1` - **ID**: `cpt-cf-chat-engine-entity-capability`
+- [ ] `p1` - **ID**: `cpt-cf-chat-engine-design-entity-capability`
 
 Typed capability definition (id, name, type: `bool|enum|str|int`, default_value, enum_values when type=enum)
 
 ##### CapabilityValue
 
-- [ ] `p2` - **ID**: `cpt-cf-chat-engine-entity-capability-value`
+- [ ] `p2` - **ID**: `cpt-cf-chat-engine-design-entity-capability-value`
 
 Per-message capability setting (id, value: boolean|string|integer)
 
@@ -300,7 +339,7 @@ Abstract content type (type, ...). Subtypes:
 
 ##### MessageReaction
 
-- [ ] `p2` - **ID**: `cpt-cf-chat-engine-entity-message-reaction`
+- [ ] `p2` - **ID**: `cpt-cf-chat-engine-design-entity-message-reaction`
 
 Reaction record (message_id, user_id, reaction_type, created_at, updated_at)
 - **ReactionType** - Enum: like, dislike, none
@@ -310,7 +349,7 @@ Reaction record (message_id, user_id, reaction_type, created_at, updated_at)
 
 ##### ShareToken
 
-- [ ] `p2` - **ID**: `cpt-cf-chat-engine-entity-share-token`
+- [ ] `p2` - **ID**: `cpt-cf-chat-engine-design-entity-share-token`
 
 Cryptographic share token (share_token, session_id, created_at, expires_at)
 
@@ -470,7 +509,7 @@ Chat Engine allows users to react to messages with simple like/dislike feedback.
 - Chat Engine → Database: All persistence operations for sessions, messages, and metadata
 - Chat Engine → Summarization Service: Context summarization requests
 
-### Component Model
+### 3.2.1 Component Model
 
 Chat Engine is deployed as a unified monolithic service. All functionality is implemented as internal modules within the same deployment unit. See Section 3.2 Architecture Overview for detailed module descriptions.
 
@@ -478,11 +517,20 @@ Chat Engine is deployed as a unified monolithic service. All functionality is im
 
 - [ ] `p1` - **ID**: `cpt-cf-chat-engine-component-service`
 
-**Responsibility scope**: Persistence, routing, and message tree management. Chat Engine does not interpret message content.
+##### Why this component exists
 
-**Responsibility boundaries**: Content moderation, AI processing, and summarization logic belong to backend plugins. File content storage belongs to File Storage Service. See `cpt-cf-chat-engine-principle-zero-business-logic`.
+Chat Engine Service is the top-level orchestrator that owns the session lifecycle and message routing pipeline, decoupling client applications from backend plugin implementations.
 
-**Related components (by ID)**:
+##### Responsibility scope
+
+Persistence, routing, and message tree management. Chat Engine does not interpret message content.
+
+##### Responsibility boundaries
+
+Content moderation, AI processing, and summarization logic belong to backend plugins. File content storage belongs to File Storage Service. See `cpt-cf-chat-engine-principle-zero-business-logic`.
+
+##### Related components (by ID)
+
 - `cpt-cf-chat-engine-actor-backend-plugin` — processes messages; called by Webhook Integration module
 - `cpt-cf-chat-engine-actor-file-storage` — stores file content; called by Conversation Export module
 - `cpt-cf-chat-engine-actor-database` — persists all session and message state
@@ -571,7 +619,7 @@ For complete endpoint definitions, request/response schemas, and examples, see t
 **Streaming**: Plugin writes chunks to `ResponseStream`; Chat Engine pipes to client via HTTP chunked transfer (NDJSON)
 
 
-### Internal Dependencies
+### 3.3.1 Internal Dependencies
 
 Chat Engine depends on the following internal modules at runtime.
 
@@ -580,7 +628,7 @@ Chat Engine depends on the following internal modules at runtime.
 | Plugin Registry | Internal registry | Resolve `ChatEngineBackendPlugin` implementations by `plugin_instance_id` at startup and on session type configuration |
 | Backend Plugin modules | `dyn ChatEngineBackendPlugin` (chat-engine-sdk) | Internal trait implementations that process messages, provide capabilities, and generate summaries |
 
-### External Dependencies
+### 3.3.2 External Dependencies
 
 | Dependency | Interface | Purpose |
 |------------|-----------|---------|
@@ -1049,7 +1097,7 @@ sequenceDiagram
 2. Database CASCADE DELETE automatically removes all reactions
 3. No orphaned reactions remain in database
 
-### Database schemas & tables
+### 3.4.1 Database schemas & tables
 
 **Schema location**: `migrations/` (versioned migration files)
 

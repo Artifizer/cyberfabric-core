@@ -1,6 +1,24 @@
 Created:  2026-02-06 by Constructor Tech
 Updated:  2026-03-10 by Constructor Tech
-# ADR-0025: Session Deletion Strategy (Soft Delete as Default)
+# ADR-0021: Session Deletion Strategy (Soft Delete as Default)
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Immediate hard delete](#option-1-immediate-hard-delete)
+  - [Option 2: Soft delete with automatic hard delete (chosen)](#option-2-soft-delete-with-automatic-hard-delete-chosen)
+  - [Option 3: External archival system](#option-3-external-archival-system)
+  - [Option 4: Soft delete only (no auto cleanup)](#option-4-soft-delete-only-no-auto-cleanup)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-06
 

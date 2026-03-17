@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0023: PostgreSQL Full-Text Search with GIN Indexes
+# ADR-0019: PostgreSQL Full-Text Search with GIN Indexes
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: PostgreSQL tsvector with GIN indexes](#option-1-postgresql-tsvector-with-gin-indexes)
+  - [Option 2: Elasticsearch](#option-2-elasticsearch)
+  - [Option 3: Simple LIKE queries](#option-3-simple-like-queries)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -82,5 +99,5 @@ See "Considered Options" and "Consequences" above for trade-off analysis.
 * HTTP POST /sessions/{id}/search and POST /search endpoints
 
 **Related ADRs**:
-* ADR-0010 (Stateless Horizontal Scaling with Database State) - PostgreSQL full-text search features
-* ADR-0020 (Session Metadata JSONB for Extensibility) - Search includes metadata fields (title, tags)
+* ADR-0009 (Stateless Horizontal Scaling with Database State) - PostgreSQL full-text search features
+* ADR-0017 (Session Metadata JSONB for Extensibility) - Search includes metadata fields (title, tags)

@@ -1,6 +1,40 @@
 Created:  2026-03-06 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# PRD
+# PRD — Chat Engine
+
+
+<!-- toc -->
+
+- [1. Overview](#1-overview)
+  - [1.1 Purpose](#11-purpose)
+  - [1.2 Background / Problem Statement](#12-background--problem-statement)
+  - [1.3 Goals (Business Outcomes)](#13-goals-business-outcomes)
+  - [1.4 Glossary](#14-glossary)
+- [2. Actors](#2-actors)
+  - [2.1 Human Actors](#21-human-actors)
+  - [2.2 System Actors](#22-system-actors)
+- [3. Operational Concept & Environment](#3-operational-concept--environment)
+  - [3.1 Module-Specific Environment Constraints](#31-module-specific-environment-constraints)
+- [4. Scope](#4-scope)
+  - [4.1 In Scope](#41-in-scope)
+  - [4.2 Out of Scope](#42-out-of-scope)
+- [5. Functional Requirements](#5-functional-requirements)
+  - [5.1 Core Session & Messaging](#51-core-session--messaging)
+- [6. Non-Functional Requirements](#6-non-functional-requirements)
+  - [6.1 NFR Exclusions](#61-nfr-exclusions)
+- [7. Public Library Interfaces](#7-public-library-interfaces)
+  - [7.1 Public API Surface](#71-public-api-surface)
+  - [7.2 External Integration Contracts](#72-external-integration-contracts)
+- [8. Use Cases](#8-use-cases)
+- [9. Acceptance Criteria](#9-acceptance-criteria)
+- [10. Dependencies](#10-dependencies)
+- [11. Assumptions](#11-assumptions)
+- [12. Risks](#12-risks)
+- [13. Additional Context](#13-additional-context)
+- [14. Intentional Exclusions](#14-intentional-exclusions)
+- [15. Traceability](#15-traceability)
+
+<!-- /toc -->
 
 ## 1. Overview
 
@@ -55,7 +89,7 @@ The system supports various conversation patterns including traditional linear c
 |------|------------|
 | **Session** | A persistent conversation context with a unique ID, owned by a client and associated with a session type |
 | **Session Type** | A configuration profile that maps a session to a backend plugin and declares available capabilities (the maximum set the plugin can provide) |
-| **Backend Plugin** | A CyberFabric ModKit plugin module implementing `ChatEngineBackendPlugin` trait; co-located in the same CyberFabric process and called directly via `ClientHub`. External HTTP backends are supported via the `chat-engine-webhook-adapter` plugin. See ADR-0026. |
+| **Backend Plugin** | A CyberFabric ModKit plugin module implementing `ChatEngineBackendPlugin` trait; co-located in the same CyberFabric process and called directly via `ClientHub`. External HTTP backends are supported via the `chat-engine-webhook-adapter` plugin. See ADR-0022. |
 | **Message Tree** | A tree structure where each message references a parent message; sibling nodes with the same parent are variants |
 | **Message Variant** | An alternative response at the same position in the conversation tree — created by regeneration or branching |
 | **Capability** | A typed feature declared by the backend plugin (`bool`, `enum`, `str`, `int`). `SessionType.available_capabilities` is the maximum set the plugin supports; `Session.enabled_capabilities` is the confirmed set for a specific session. Per-message settings are passed as `CapabilityValue` (id + value). |
@@ -112,7 +146,7 @@ The system supports various conversation patterns including traditional linear c
 
 Plugin modules are co-located within the same CyberFabric server process and called directly via `ClientHub` — no HTTP round-trip, no auth negotiation, no retry logic required at the Chat Engine level. Plugin vendors who need to delegate to an external HTTP endpoint use the first-party **`chat-engine-webhook-adapter`** plugin, which internally handles auth, retry, circuit breaker, and throttling.
 
-**See**: ADR-0026 (CyberFabric Plugin System for Backend Integration)
+**See**: ADR-0022 (CyberFabric Plugin System for Backend Integration)
 <!-- fdd-id-content -->
 
 #### File Storage Service
@@ -147,6 +181,10 @@ Plugin modules are co-located within the same CyberFabric server process and cal
 
 > Chat Engine operates as a stateless ModKit gateway module within the CyberFabric platform. No module-specific environment constraints beyond platform defaults.
 
+### 3.1 Module-Specific Environment Constraints
+
+No module-specific environment constraints beyond platform defaults.
+
 ## 4. Scope
 
 ### 4.1 In Scope
@@ -179,6 +217,8 @@ The following are explicitly out of scope for Chat Engine:
 <!-- fdd-id-content -->
 
 ## 5. Functional Requirements
+
+### 5.1 Core Session & Messaging
 
 #### FR-001: Create Session
 
@@ -802,11 +842,21 @@ Chat Engine's primary users are Application Developers and Backend Plugin Develo
 - **Client SDK**: At minimum one reference client SDK must be provided (language TBD) demonstrating session creation, message exchange, and streaming
 <!-- fdd-id-content -->
 
+### 6.1 NFR Exclusions
+
+No explicit NFR exclusions at this time. All listed NFRs are in scope.
+
 ## 7. Public Library Interfaces
+
+### 7.1 Public API Surface
 
 See [api/README.md](../api/README.md) for the public HTTP REST and Webhook API specifications.
 
 See [schemas/README.md](../schemas/README.md) for JSON schema definitions.
+
+### 7.2 External Integration Contracts
+
+Backend Plugin integration is defined through the `ChatEngineBackendPlugin` trait (see DESIGN). No external HTTP integration contracts beyond the plugin interface.
 
 ## 8. Use Cases
 

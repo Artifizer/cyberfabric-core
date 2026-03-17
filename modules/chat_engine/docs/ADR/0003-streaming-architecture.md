@@ -2,6 +2,23 @@ Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
 # ADR-0003: Streaming-First with HTTP Chunked Transfer
 
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Streaming-first with HTTP chunked transfer](#option-1-streaming-first-with-http-chunked-transfer)
+  - [Option 2: Buffered responses](#option-2-buffered-responses)
+  - [Option 3: Optional streaming](#option-3-optional-streaming)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
+
 **Date**: 2026-02-04
 
 **Status**: accepted
@@ -94,7 +111,6 @@ Confirmed via design review and alignment with DESIGN.md implementation.
 * `cpt-cf-chat-engine-design-context-backpressure` - Implementation details for flow control
 
 **Related ADRs**:
-* ADR-0006 (Webhook Protocol) - HTTP streaming from backends via chunked encoding
-* ADR-0007 (HTTP Client Protocol) - HTTP streaming protocol for client communication
-* ADR-0009 (Client-Initiated Streaming Cancellation) - Client cancellation mechanism
-* ADR-0012 (Streaming Backpressure with Buffer Limits) - Buffer management and flow control strategy
+* ADR-0006 (HTTP Client Protocol) - HTTP streaming protocol for client communication
+* ADR-0008 (Client-Initiated Streaming Cancellation) - Client cancellation mechanism
+* ADR-0010 (Streaming Backpressure with Buffer Limits) - Buffer management and flow control strategy

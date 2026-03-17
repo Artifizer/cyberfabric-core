@@ -1,6 +1,23 @@
 Created:  2026-02-04 by Constructor Tech
 Updated:  2026-03-06 by Constructor Tech
-# ADR-0019: Token-Based Session Sharing with Branching
+# ADR-0016: Token-Based Session Sharing with Branching
+
+
+<!-- toc -->
+
+- [Context and Problem Statement](#context-and-problem-statement)
+- [Decision Drivers](#decision-drivers)
+- [Considered Options](#considered-options)
+- [Decision Outcome](#decision-outcome)
+  - [Consequences](#consequences)
+  - [Confirmation](#confirmation)
+- [Pros and Cons of the Options](#pros-and-cons-of-the-options)
+  - [Option 1: Cryptographic share token with separate table](#option-1-cryptographic-share-token-with-separate-table)
+  - [Option 2: Signed session_id JWT](#option-2-signed-sessionid-jwt)
+  - [Option 3: Publicly readable sessions](#option-3-publicly-readable-sessions)
+- [Related Design Elements](#related-design-elements)
+
+<!-- /toc -->
 
 **Date**: 2026-02-04
 
@@ -91,10 +108,10 @@ Confirmed via design review and alignment with DESIGN.md implementation.
 * `cpt-cf-chat-engine-usecase-share-session` - Full use case for sharing
 
 **Design Elements**:
-* `cpt-cf-chat-engine-entity-share-token` - Cryptographic token, session mapping, metadata
+* `cpt-cf-chat-engine-design-entity-share-token` - Cryptographic token, session mapping, metadata
 * cpt-cf-chat-engine-db-table-share-tokens - ShareToken table with constraints
 * Sequence diagram S10 (Share Session)
 
 **Related ADRs**:
-* ADR-0017 (Conversation Branching from Any Historical Message) - Recipients branch from last message
-* ADR-0018 (Session Type Switching with Capability Updates) - Branched sessions use original session type
+* ADR-0014 (Conversation Branching from Any Historical Message) - Recipients branch from last message
+* ADR-0015 (Session Type Switching with Capability Updates) - Branched sessions use original session type
